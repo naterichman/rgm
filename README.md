@@ -12,4 +12,4 @@ What I really want is something that allows me to easily list, search, and enter
 directory I'm currently working in, while also being performant.
 
 This is also meant to be a project for me to learn rust, I'm tracking development status
-with #1
+with [#1](https://github.com/naterichman/rgm/issues/1)
