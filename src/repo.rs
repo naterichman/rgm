@@ -2,16 +2,16 @@ use git2::{Repository, Error as GitError, StatusOptions, ErrorCode};
 use std::path::PathBuf;
 use std::fmt;
 use std::convert;
+use std::io::Error;
 
 
 #[derive(Debug)]
 pub enum Status {
-    // Commits ahead of main remote (origin) TODO: customize main remote?
-    Ahead,
     //Bare repo,
     Bare,
-    // Commits behind main remote
-    Behind,
+    // Commits diverged from main remote (origin) TODO: customize main remote?
+    // Ahead, Behind
+    Diverged(usize, usize),
     // Even, and nothing modified
     Clean,
     // Modified work
@@ -31,7 +31,7 @@ pub struct Repo {
     // Currently active branch name
     pub branch: String,
     // Status
-    pub status: Status,
+    pub status: Option<Status>,
     // List of remotes
     pub remotes: Vec<String>,
     // Single valued alias
@@ -45,7 +45,7 @@ impl Repo {
         path: PathBuf,
         name: String,
         branch: String,
-        status: Status,
+        status: Option<Status>,
         remotes: Vec<String>,
         alias: Option<String>,
         tags: Vec<String>
@@ -86,22 +86,70 @@ impl convert::TryFrom<Repository> for Repo {
         let status = match raw.statuses(Some(&mut stat_opts)) {
             Ok(status_raw) => {
                 // TODO: determine between clean, detached, behind, ahead 
-                if status_raw.is_empty(){ Status::Clean }
-                else { Status::Dirty }
+                if status_raw.is_empty(){
+                    local_remote_diff(&raw, "origin").ok()
+                }
+                else { Some(Status::Dirty) }
             }
             Err(e) => {
-                if e.code() == ErrorCode::BareRepo { Status::Bare }
-                return Err(e)
+                if e.code() == ErrorCode::BareRepo { Some(Status::Bare) }
+                else { None }
             }
-        }
-        unimplemented!()
+        };
+        let repo_path = raw.workdir().unwrap().to_path_buf();
+        let name = String::from(repo_path
+            .as_path()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap());
+        Ok(Repo {
+            path: repo_path,
+            name: name,
+            branch: rev.to_string(),
+            status: status,
+            remotes: raw.remotes()?.iter().map(|x| x.unwrap().to_string()).collect(),
+            alias: None,
+            tags: vec![]
+        })
     }
-
 }
 
 impl fmt::Display for Repo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: Proper display
         write!(f, "{}", self.path.display())
+    }
+}
+
+fn local_remote_diff(repo: &Repository, remote: &str) -> Result<Status, Box<dyn std::error::Error>> {
+    // Get local head
+    let head = repo.head()?;
+    let local_head = head.peel_to_commit()?;
+    let remote = format!("{}/{}", remote, head.shorthand().unwrap());
+    // Get remote head
+    let remote_head = repo.resolve_reference_from_short_name(&remote)?
+        .peel_to_commit()?;
+    // Get diff with `repo.graph_ahead_behind(local, remote)`
+    let (behind, ahead) = repo.graph_ahead_behind(local_head.id(), remote_head.id())?;
+    // Set Status:
+    if (behind, ahead) == (0, 0) {
+        Ok(Status::Clean)
+    } else {
+        Ok(Status::Diverged(behind, ahead))
+    }
+}
+
+pub struct Repos(Vec<Repo>);
+
+impl Repos {
+    pub fn save(path: PathBuf){
+        unimplemented!()
+    }
+}
+
+impl From<Vec<PathBuf>> for Repos {
+    pub fn from(paths: Vec<PathBuf>) -> Self {
+        unimplemented!()
     }
 }

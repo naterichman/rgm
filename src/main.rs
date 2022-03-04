@@ -4,11 +4,15 @@ use git2::Repository;
 use state::State;
 use std::path::PathBuf;
 use walkdir::WalkDir;
+use repo::Repo;
 
 mod args;
-mod error;
 mod repo;
 mod state;
+
+fn usage(){
+    println!("rgm PATH")
+}
 
 fn main() {
     let args = Args::parse();
@@ -16,14 +20,15 @@ fn main() {
     if let Some(val) = state.path {
         let targets = generate_repos(val);
         for target in targets {
-            let repo = Repository::open(target.as_path());
+            let raw = Repository::open(target.as_path());
+            let repo = Repo::try_from(raw.unwrap());
             match repo {
-                Ok(v) => println!("{} {:?}", v.workdir().unwrap().display(), v.state()),
-                Err(s) => println!("Couldn't get repo info at path {:?}", target),
+                Ok(v) => println!("{:?}", v),
+                Err(s) => println!("Couldn't get repo info at path {:?}", s),
             }
         }
     } else {
-        unimplemented!();
+        usage()
     }
 }
 
