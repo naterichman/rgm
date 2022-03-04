@@ -1,12 +1,14 @@
-mod args;
-mod repo;
-mod state;
 use args::Args;
 use clap::Parser;
 use git2::Repository;
 use state::State;
 use std::path::PathBuf;
 use walkdir::WalkDir;
+
+mod args;
+mod error;
+mod repo;
+mod state;
 
 fn main() {
     let args = Args::parse();
