@@ -1,11 +1,13 @@
 use git2::{Repository, Error as GitError, StatusOptions, ErrorCode};
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::prelude::*;
 use std::fmt;
 use std::convert;
-use std::io::Error;
+use serde::Serialize;
+use crate::error::{Result,RgmError};
 
-
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Status {
     //Bare repo,
     Bare,
@@ -22,7 +24,7 @@ pub enum Status {
     Other
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Repo {
     // Path to repo work dir
     pub path: PathBuf,
@@ -140,16 +142,23 @@ fn local_remote_diff(repo: &Repository, remote: &str) -> Result<Status, Box<dyn 
     }
 }
 
+#[derive(Serialize)]
 pub struct Repos(Vec<Repo>);
 
 impl Repos {
-    pub fn save(path: PathBuf){
-        unimplemented!()
+    pub fn save(&self, path: PathBuf) -> Result<()> {
+        let mut file = File::create(path)
+            .map_err(|err| RgmError { message: err.to_string() })?;
+        let json = serde_json::to_string(&self.0)
+            .map_err(|err| RgmError { message: err.to_string() })?;
+        file.write(&json.as_bytes())
+            .map(|_| ())
+            .map_err(|err| RgmError { message: err.to_string() })
     }
 }
 
 impl From<Vec<PathBuf>> for Repos {
-    pub fn from(paths: Vec<PathBuf>) -> Self {
+    fn from(paths: Vec<PathBuf>) -> Self {
         unimplemented!()
     }
 }

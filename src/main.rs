@@ -1,35 +1,49 @@
-use args::Args;
+use args::{Cli, Commands};
 use clap::Parser;
 use git2::Repository;
-use state::State;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 use repo::Repo;
 
 mod args;
 mod repo;
-mod state;
+mod error;
 
 fn usage(){
     println!("rgm PATH")
 }
 
 fn main() {
-    let args = Args::parse();
-    let state = State::from(args);
-    if let Some(val) = state.path {
-        let targets = generate_repos(val);
-        for target in targets {
-            let raw = Repository::open(target.as_path());
-            let repo = Repo::try_from(raw.unwrap());
-            match repo {
-                Ok(v) => println!("{:?}", v),
-                Err(s) => println!("Couldn't get repo info at path {:?}", s),
-            }
+    let cli = Cli::parse();
+    match cli.command {
+        Some(command) => match command {
+            Commands::Tag{tags, path} => {
+                unimplemented!()
+            },
+            Commands::Alias{alias, path} => {
+                unimplemented!()
+            },
+            Commands::Import{path} => {
+                let targets = generate_repos(path);
+                for target in targets {
+                    let raw = Repository::open(target.as_path());
+                    let repo = Repo::try_from(raw.unwrap());
+                    match repo {
+                        Ok(v) => println!("{:?}", v),
+                        Err(s) => println!("Couldn't get repo info at path {:?}", s),
+                    }
+                }
+            },
+        },
+        None => {
+            // List git directories,
+            println!("List git repos")
         }
-    } else {
-        usage()
     }
+    //if let Some(val) = state.path {
+    //} else {
+    //    usage()
+    //}
 }
 
 fn generate_repos(path: PathBuf) -> Vec<PathBuf> {
