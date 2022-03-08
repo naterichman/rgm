@@ -4,10 +4,11 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::fmt;
 use std::convert;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use crate::error::{Result,RgmError};
+use walkdir::WalkDir;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
     //Bare repo,
     Bare,
@@ -24,7 +25,7 @@ pub enum Status {
     Other
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Repo {
     // Path to repo work dir
     pub path: PathBuf,
@@ -80,7 +81,7 @@ impl Repo {
 
 impl convert::TryFrom<Repository> for Repo {
     type Error = GitError;
-    fn try_from(raw: Repository) -> Result<Self, Self::Error> {
+    fn try_from(raw: Repository) -> std::result::Result<Self, Self::Error> {
         let head = raw.head()?;
         let rev = head.shorthand().unwrap();
 
@@ -124,7 +125,7 @@ impl fmt::Display for Repo {
     }
 }
 
-fn local_remote_diff(repo: &Repository, remote: &str) -> Result<Status, Box<dyn std::error::Error>> {
+fn local_remote_diff(repo: &Repository, remote: &str) -> std::result::Result<Status, Box<dyn std::error::Error>> {
     // Get local head
     let head = repo.head()?;
     let local_head = head.peel_to_commit()?;
@@ -142,23 +143,70 @@ fn local_remote_diff(repo: &Repository, remote: &str) -> Result<Status, Box<dyn 
     }
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Repos(Vec<Repo>);
 
 impl Repos {
-    pub fn save(&self, path: PathBuf) -> Result<()> {
+    pub fn save(&self, path: &PathBuf) -> Result<()> {
         let mut file = File::create(path)
             .map_err(|err| RgmError { message: err.to_string() })?;
         let json = serde_json::to_string(&self.0)
             .map_err(|err| RgmError { message: err.to_string() })?;
         file.write(&json.as_bytes())
-            .map(|_| ())
-            .map_err(|err| RgmError { message: err.to_string() })
+            .map_err(|err| RgmError { message: err.to_string() });
+        return Ok(())
+    }
+    
+    pub fn load(path: &PathBuf) -> Result<Self> {
+        let mut file = File::open(path)
+            .map_err(|err| RgmError { message: err.to_string() })?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .map_err(|err| RgmError { message: err.to_string() })?;
+        let repos: Repos = serde_json::from_str(&contents)
+            .map_err(|err| RgmError { message: err.to_string() })?;
+        Ok(repos)
     }
 }
 
-impl From<Vec<PathBuf>> for Repos {
-    fn from(paths: Vec<PathBuf>) -> Self {
-        unimplemented!()
+impl From<&PathBuf> for Repos {
+    fn from(path: &PathBuf) -> Self {
+        let mut walker = WalkDir::new(path.as_path()).into_iter();
+        let mut repos: Vec<Repo> = Vec::new();
+        loop {
+            let entry = match walker.next() {
+                None => break,
+                Some(Err(_)) => unimplemented!(), //Eventually debug log
+                Some(Ok(entry)) => entry,
+            };
+            let ft = entry.file_type();
+            // Don't care about files
+            if ft.is_file() {
+                continue;
+            } else {
+                // Skip hidden directories
+                if entry
+                    .file_name()
+                    .to_str()
+                    .map(|s| s.starts_with('.'))
+                    .unwrap_or(false)
+                {
+                    walker.skip_current_dir();
+                    continue;
+                }
+                let g_dir = entry.path().join(".git");
+                // Found a git subdirectory, no need to recurse in this dir anymore.
+                if g_dir.exists() && g_dir.is_dir() {
+                    walker.skip_current_dir();
+                    let raw = Repository::open(entry.path());
+                    let repo = Repo::try_from(raw.unwrap());
+                    match repo {
+                        Ok(v) => repos.push(v),
+                        Err(s) => println!("Couldn't get repo info at path {:?}", s),
+                    }
+                }
+            }
+        }
+        Repos(repos)
     }
 }
