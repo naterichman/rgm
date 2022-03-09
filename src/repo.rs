@@ -162,12 +162,12 @@ impl Repos {
         let json = serde_json::to_string(&self.repos)
             .map_err(|err| RgmError { message: err.to_string() })?;
         file.write(&json.as_bytes())
-            .map_err(|err| RgmError { message: err.to_string() });
+            .map_err(|err| RgmError { message: err.to_string() })?;
         return Ok(())
     }
     
     pub fn load() -> Result<Self> {
-        let mut file = OpenOptions::new().write(true).create(true).open(config_file())
+        let mut file = OpenOptions::new().read(true).open(config_file())
             .map_err(|err| RgmError { message: err.to_string() })?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)
