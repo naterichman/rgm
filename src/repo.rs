@@ -1,6 +1,6 @@
 use git2::{Repository, Error as GitError, StatusOptions, ErrorCode};
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::fmt;
 use std::convert;
@@ -144,21 +144,30 @@ fn local_remote_diff(repo: &Repository, remote: &str) -> std::result::Result<Sta
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Repos(Vec<Repo>);
+pub struct Repos {
+    pub repos: Vec<Repo>
+}
+
+fn config_file() -> PathBuf {
+    let mut home = dirs::home_dir().unwrap();
+    home.push(".rgm.conf");
+    home
+}
 
 impl Repos {
-    pub fn save(&self, path: &PathBuf) -> Result<()> {
-        let mut file = File::create(path)
+
+    pub fn save(&self) -> Result<()> {
+        let mut file = OpenOptions::new().write(true).create(true).open(config_file())
             .map_err(|err| RgmError { message: err.to_string() })?;
-        let json = serde_json::to_string(&self.0)
+        let json = serde_json::to_string(&self.repos)
             .map_err(|err| RgmError { message: err.to_string() })?;
         file.write(&json.as_bytes())
             .map_err(|err| RgmError { message: err.to_string() });
         return Ok(())
     }
     
-    pub fn load(path: &PathBuf) -> Result<Self> {
-        let mut file = File::open(path)
+    pub fn load() -> Result<Self> {
+        let mut file = OpenOptions::new().write(true).create(true).open(config_file())
             .map_err(|err| RgmError { message: err.to_string() })?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)
@@ -207,6 +216,6 @@ impl From<&PathBuf> for Repos {
                 }
             }
         }
-        Repos(repos)
+        Repos{ repos }
     }
 }

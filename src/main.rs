@@ -14,7 +14,6 @@ fn usage(){
 
 fn main() {
     let cli = Cli::parse();
-    let cache_path = PathBuf::from("~/.rgm.json").canonicalize().unwrap();
     match cli.command {
         Some(command) => match command {
             Commands::Tag{tags, path} => {
@@ -25,13 +24,20 @@ fn main() {
             },
             Commands::Import{path} => {
                 let repos = Repos::from(&path);
-                repos.save(&cache_path);
-                println!("Saved repos to {}", cache_path.display())
+                repos.save();
+                println!("Saved repos to")
             },
         },
         None => {
-            // List git directories,
-            println!("List git repos")
+            let repos = Repos::load();
+            match repos {
+                Ok(r) => {
+                    for val in r.repos.iter() {
+                        println!("{:?}", val)
+                    }
+                },
+                Err(e) => println!("{:?}", e)
+            }
         }
     }
 }
