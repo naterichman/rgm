@@ -45,8 +45,10 @@ fn main() {
             },
             Commands::Import{path} => {
                 let repos = Repos::from(&path);
-                repos.save();
-                println!("Saved repos to")
+                match repos.save() {
+                    Ok(p) => println!("Saved {} repos to {}", &repos.meta.size, p.display()),
+                    Err(e) => println!("Error saving repos: {}", e)
+                }
             },
         },
         None => {

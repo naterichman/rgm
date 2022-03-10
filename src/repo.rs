@@ -143,10 +143,17 @@ fn local_remote_diff(repo: &Repository, remote: &str) -> std::result::Result<Sta
     }
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct Repos {
-    pub repos: Vec<Repo>
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Meta {
+    pub size: usize
 }
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Repos {
+    pub repos: Vec<Repo>,
+    pub meta: Meta
+}
+
 
 fn config_file() -> PathBuf {
     let mut home = dirs::home_dir().unwrap();
@@ -156,14 +163,15 @@ fn config_file() -> PathBuf {
 
 impl Repos {
 
-    pub fn save(&self) -> Result<()> {
-        let mut file = OpenOptions::new().write(true).create(true).open(config_file())
+    pub fn save(&self) -> Result<PathBuf> {
+        let file_name = config_file();
+        let mut file = OpenOptions::new().write(true).create(true).open(&file_name)
             .map_err(|err| RgmError { message: err.to_string() })?;
-        let json = serde_json::to_string(&self.repos)
+        let json = serde_json::to_string(&self)
             .map_err(|err| RgmError { message: err.to_string() })?;
         file.write(&json.as_bytes())
             .map_err(|err| RgmError { message: err.to_string() })?;
-        return Ok(())
+        return Ok(file_name)
     }
     
     pub fn load() -> Result<Self> {
@@ -172,7 +180,7 @@ impl Repos {
         let mut contents = String::new();
         file.read_to_string(&mut contents)
             .map_err(|err| RgmError { message: err.to_string() })?;
-        let repos: Repos = serde_json::from_str(&contents)
+        let repos: Repos = serde_json::from_str::<Repos>(&contents)
             .map_err(|err| RgmError { message: err.to_string() })?;
         Ok(repos)
     }
@@ -211,11 +219,17 @@ impl From<&PathBuf> for Repos {
                     let repo = Repo::try_from(raw.unwrap());
                     match repo {
                         Ok(v) => repos.push(v),
-                        Err(s) => println!("Couldn't get repo info at path {:?}", s),
+                        Err(s) => println!(
+                            "Couldn't get repo info at path: {} err: {:?}",
+                            entry.path().display(), s
+                        ),
                     }
                 }
             }
         }
-        Repos{ repos }
+        Repos{ 
+            meta: Meta{ size: repos.len() },
+            repos,
+        }
     }
 }
