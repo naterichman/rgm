@@ -2,10 +2,12 @@ use args::{Cli, Commands};
 use clap::Parser;
 use repo::Repos;
 use std::process;
+use screen::Screen;
 
 mod args;
 mod repo;
 mod error;
+mod screen;
 
 fn usage(){
     println!("rgm PATH")
@@ -55,12 +57,23 @@ fn main() {
             let repos = Repos::load();
             match repos {
                 Ok(r) => {
-                    for val in r.repos.iter() {
-                        println!("{:?}", val)
+                    let mut screen = Screen::new(r).unwrap();
+                    loop {
+                        if !screen.update() {
+                            break
+                        }
                     }
-                },
+                }
                 Err(e) => println!("{:?}", e)
             }
+            //match repos {
+            //   Ok(r) => {
+            //        for val in r.repos.iter() {
+            //            println!("{:?}", val)
+            //        }
+            //    },
+            //    Err(e) => println!("{:?}", e)
+           // }
         }
     }
 }
