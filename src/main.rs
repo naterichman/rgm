@@ -57,7 +57,7 @@ fn main() {
             let repos = Repos::load();
             match repos {
                 Ok(r) => {
-                    let mut screen = Screen::new(r).unwrap();
+                    let mut screen = Screen::new(r);
                     screen.start();
                     loop {
                         if !screen.update() {

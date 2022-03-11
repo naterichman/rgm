@@ -9,21 +9,49 @@ use crossterm::{
     queue, QueueableCommand, cursor,
     style::{Print,Stylize}
 };
-use std::ops::Drop;
+use std::ops::{Range, Drop};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
-use crate::repo::Repos;
+use crate::repo::{Repos, Repo, Status};
 use crate::error::{Result, RgmError};
 
 #[derive(Debug, PartialEq)]
 pub enum Action{
+    // Deselect index/indices
+    Deselect(Range<usize>),
+    // Select index/indices
+    Select(Range<usize>),
+    // Enter an aliaas for selected repo
+    Alias,
+    // Enter a tag for selected repo(s)
+    Tag,
+    // Input Action for tag and alias
+    Input,
+    // Move up or down
+    MoveDown(usize),
+    MoveUp(usize),
+    // Toggle tree view
+    ToggleTree,
+    // Toggle expanded or collapsed
+    ToggleCollapsed,
+    // Quit
     Exit,
+    // No action
     Nil
 }
 
 impl Action {
     pub fn needs_update(&self) -> bool {
         match self {
+            Self::Deselect(_) => true,
+            Self::Select(_) => true,
+            Self::MoveUp(_) => true,
+            Self::MoveDown(_) => true,
+            Self::Alias => true,
+            Self::Tag => true,
+            Self::Input => false,
+            Self::ToggleTree => true,
+            Self::ToggleCollapsed => true,
             Self::Exit => false,
             Self::Nil => false,
         }
@@ -34,40 +62,46 @@ pub struct Screen {
     repos: Repos,
     height: usize,
     width: usize,
+    tree_view: bool
 }
 
 impl Screen {
-    pub fn new(repos: Repos) -> Result<Self> {
+    pub fn new(repos: Repos) -> Self {
         if !stdin().is_tty() { 
-            Err(RgmError { 
-                message: String::from("Cannot run RGM, stdin is not a tty")
-            })
+            // Run without screen
+            unimplemented!()
         } else {
-            let (height, width) = size()
-                .map_err(|err| RgmError{ message: err.to_string() })?;
-            execute!(stdout(), EnterAlternateScreen)
-                .map_err(|err| RgmError{ message: err.to_string() })?;
-            enable_raw_mode()
-                .map_err(|err| RgmError{ message: err.to_string() })?;
-            Ok(Self {
+            let (height, width) = size().unwrap();
+            Self {
                 repos,
                 height: height as usize,
                 width: width as usize,
-            })
+                tree_view: false
+            }
         }
     }
-    pub fn start(&self) {
+    pub fn start(&self) -> Result<()> {
         self.write_repos();
+        execute!(stdout(), EnterAlternateScreen)
+            .map_err(|err| RgmError{ message: err.to_string() })?;
+        enable_raw_mode()
+            .map_err(|err| RgmError{ message: err.to_string() })?;
+        Ok(())
+    }
+
+    fn write_repo(&self, repo: &Repo) {
+        if self.tree_view {
+            unimplemented!()
+        } else {
+            let status = repo.status.as_ref().unwrap_or(&Status::Other);
+            stdout().queue(Print(format!( "{} {:?}\r\n", repo.name, status).red()));
+        }
     }
     
     fn write_repos(&self) {
+        // TODO: Write repos in tree mode
         for repo in self.repos.repos.iter()  {
-            stdout().queue(
-                Print(
-                    format!( "{} {:?}", repo.path.display(), repo.status).red()
-                ),
-            );
-            stdout().queue(cursor::MoveDown(1));
+            self.write_repo(&repo)
         }
         stdout().flush();
     }
@@ -110,7 +144,6 @@ impl Screen {
 
 impl Drop for Screen {
     fn drop(&mut self) {
-        // Destroy events iterator?
         execute!(stdout(), LeaveAlternateScreen).unwrap();
         disable_raw_mode().unwrap();
     }
