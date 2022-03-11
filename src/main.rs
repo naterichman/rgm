@@ -58,6 +58,7 @@ fn main() {
             match repos {
                 Ok(r) => {
                     let mut screen = Screen::new(r).unwrap();
+                    screen.start();
                     loop {
                         if !screen.update() {
                             break
