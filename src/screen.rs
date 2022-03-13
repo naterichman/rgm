@@ -14,6 +14,7 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use crate::repo::{Repos, Repo, Status};
 use crate::error::{Result, RgmError};
+use crate::repoprinter::{FlatPrinter, Printer};
 
 #[derive(Debug, PartialEq)]
 pub enum Action{
@@ -62,6 +63,8 @@ pub struct Screen {
     repos: Repos,
     height: usize,
     width: usize,
+    //
+    longest_name: usize,
     tree_view: bool
 }
 
@@ -71,39 +74,50 @@ impl Screen {
             // Run without screen
             unimplemented!()
         } else {
-            let (height, width) = size().unwrap();
+            let (width, height) = size().unwrap();
+            let mut longest_name = 0;
+            for repo in repos.repos.iter() {
+                if repo.name.len() > longest_name {
+                    longest_name = repo.name.len();
+                }
+            }
             Self {
                 repos,
                 height: height as usize,
                 width: width as usize,
+                longest_name,
                 tree_view: false
             }
         }
     }
     pub fn start(&self) -> Result<()> {
-        self.write_repos();
+        println!("Size: {}x{}", self.height, self.width);
         execute!(stdout(), EnterAlternateScreen)
             .map_err(|err| RgmError{ message: err.to_string() })?;
         enable_raw_mode()
             .map_err(|err| RgmError{ message: err.to_string() })?;
+        self.write_repos();
         Ok(())
-    }
-
-    fn write_repo(&self, repo: &Repo) {
-        if self.tree_view {
-            unimplemented!()
-        } else {
-            let status = repo.status.as_ref().unwrap_or(&Status::Other);
-            stdout().queue(Print(format!( "{} {:?}\r\n", repo.name, status).red()));
-        }
     }
     
     fn write_repos(&self) {
+        let mut out = stdout();
+        let mut lines = 0;
+        let mut idx = 0;
+        println!("Got size: {:?}x{:?}", self.height, self.width);
+        out.queue(cursor::MoveTo(0,0));
         // TODO: Write repos in tree mode
-        for repo in self.repos.repos.iter()  {
-            self.write_repo(&repo)
+        while lines < self.height - 1 {
+            let repo = &self.repos.repos[idx];
+            let mut printer = FlatPrinter::new(&mut out, self.width, repo, self.longest_name);
+            if idx == 0 {
+                printer.toggle_focused();
+            }
+            printer.print();
+            lines += printer.height();
+            idx += 1;
         }
-        stdout().flush();
+        out.flush();
     }
     
     fn get_event(&self) -> Option<Event> {

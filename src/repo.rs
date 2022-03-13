@@ -7,6 +7,7 @@ use std::convert;
 use serde::{Deserialize, Serialize};
 use crate::error::{Result,RgmError};
 use walkdir::WalkDir;
+use crossterm::style::Color;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
@@ -23,6 +24,20 @@ pub enum Status {
     Detached,
     // TODO: Others? Merge/rebase in progress?
     Other
+}
+
+impl Status {
+    pub fn display(&self) -> (String, Color) {
+        match self {
+            Status::Bare => (String::from("Empty"), Color::White),
+            // Todo
+            Status::Diverged(_,_) => (String::from("Diverged"),Color::Red),
+            Status::Clean => (String::from("Clean"), Color::Green),
+            Status::Dirty => (String::from("Dirty"), Color::Yellow),
+            Status::Detached => (String::from("Detached"), Color::Red),
+            Status::Other => (String::from("Other"), Color::White)
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

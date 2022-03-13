@@ -8,6 +8,7 @@ mod args;
 mod repo;
 mod error;
 mod screen;
+mod repoprinter;
 
 fn usage(){
     println!("rgm PATH")
@@ -58,7 +59,9 @@ fn main() {
             match repos {
                 Ok(r) => {
                     let mut screen = Screen::new(r);
-                    screen.start();
+                    if let Err(e) = screen.start() {
+                        println!("{}", e);
+                    }
                     loop {
                         if !screen.update() {
                             break
