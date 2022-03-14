@@ -1,12 +1,12 @@
 use crossterm::{
-    event::{Event, KeyCode, read, poll},
+    event::{Event, KeyCode, read, poll, KeyEvent},
     tty::IsTty,
     terminal::{
         EnterAlternateScreen, LeaveAlternateScreen,
-        enable_raw_mode, disable_raw_mode, size
+        enable_raw_mode, disable_raw_mode, size, Clear, ClearType
     },
     execute,
-    queue, QueueableCommand, cursor,
+    queue, QueueableCommand, cursor, ExecutableCommand,
     style::{Print,Stylize}
 };
 use std::ops::{Range, Drop};
@@ -29,8 +29,7 @@ pub enum Action{
     // Input Action for tag and alias
     Input,
     // Move up or down
-    MoveDown(usize),
-    MoveUp(usize),
+    Move,
     // Toggle tree view
     ToggleTree,
     // Toggle expanded or collapsed
@@ -63,6 +62,7 @@ pub struct Screen {
     repos: Repos,
     height: usize,
     width: usize,
+    focused: usize,
     //
     longest_name: usize,
     tree_view: bool
@@ -85,6 +85,7 @@ impl Screen {
                 repos,
                 height: height as usize,
                 width: width as usize,
+                focused: 0,
                 longest_name,
                 tree_view: false
             }
@@ -105,12 +106,16 @@ impl Screen {
         let mut lines = 0;
         let mut idx = 0;
         println!("Got size: {:?}x{:?}", self.height, self.width);
-        out.queue(cursor::MoveTo(0,0));
+        out.execute(cursor::MoveTo(0,0));
+        out.execute(Clear(ClearType::All));
         // TODO: Write repos in tree mode
+        // TODO: Refactor repos to be a vector of FlatPrinters.
         while lines < self.height - 1 {
             let repo = &self.repos.repos[idx];
+            // Add a field to_print to flat printer that is set here, determines whether or not to
+            // print line if there is available space on the screen given self.height.
             let mut printer = FlatPrinter::new(&mut out, self.width, repo, self.longest_name);
-            if idx == 0 {
+            if idx == self.focused {
                 printer.toggle_focused();
             }
             printer.print();
@@ -128,23 +133,40 @@ impl Screen {
         }
     }
 
-    fn handle_event(&mut self, event: Option<&Event>) -> Action {
-        match event {
-            Some(evt) => {
-                if *evt == Event::Key(KeyCode::Char('q').into()) {
-                    Action::Exit
-                } else {
-                    Action::Nil
+    fn handle_event(&mut self, event: Option<Event>) -> Action {
+        if let Some(evt) = event {
+            match evt {
+                Event::Key(key_evt) => self.handle_key_event(key_evt),
+                _ => Action::Nil
+            }
+        } else {
+            Action::Nil
+        }
+    }
+
+    fn handle_key_event(&mut self, event: KeyEvent) -> Action{
+        match event.code {
+            KeyCode::Char('q') => Action::Exit,
+            KeyCode::Up => {
+                if self.focused != 0 {
+                    self.focused = self.focused - 1;
                 }
+                Action::Move
             },
-            None => Action::Nil
+            KeyCode::Down => {
+                if self.focused != self.repos.repos.len() {
+                    self.focused = self.focused + 1;
+                }
+                Action::Move
+            },
+            _ => Action::Nil
         }
     }
 
     // Simple update until q is pressed.
     pub fn update(&mut self) -> bool{
         let event = self.get_event();
-        let action = self.handle_event(event.as_ref());
+        let action = self.handle_event(event);
         if action.needs_update() {
             self.write_repos()
         }
