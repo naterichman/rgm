@@ -2,6 +2,7 @@ use args::{Cli, Commands};
 use clap::Parser;
 use repo::Repos;
 use std::process;
+use std::io::stdout;
 use screen::Screen;
 
 mod args;
@@ -58,7 +59,7 @@ fn main() {
             let repos = Repos::load();
             match repos {
                 Ok(r) => {
-                    let mut screen = Screen::new(r);
+                    let mut screen = Screen::new(r, stdout());
                     if let Err(e) = screen.start() {
                         println!("{}", e);
                     }

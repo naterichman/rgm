@@ -45,8 +45,7 @@ impl Action {
         match self {
             Self::Deselect(_) => true,
             Self::Select(_) => true,
-            Self::MoveUp(_) => true,
-            Self::MoveDown(_) => true,
+            Self::Move => true,
             Self::Alias => true,
             Self::Tag => true,
             Self::Input => false,
@@ -58,18 +57,25 @@ impl Action {
     }
 }
 
-pub struct Screen {
+pub struct Screen<T>
+where T: Write
+{
     repos: Repos,
+    writer: T,
     height: usize,
     width: usize,
     focused: usize,
     //
     longest_name: usize,
-    tree_view: bool
+    tree_view: bool,
+    selected: Vec<usize>,
+    start_idx: usize,
 }
 
-impl Screen {
-    pub fn new(repos: Repos) -> Self {
+impl<T> Screen<T>
+where T: Write
+{
+    pub fn new(repos: Repos, writer: T) -> Self {
         if !stdin().is_tty() { 
             // Run without screen
             unimplemented!()
@@ -87,13 +93,16 @@ impl Screen {
                 width: width as usize,
                 focused: 0,
                 longest_name,
-                tree_view: false
+                tree_view: false,
+                selected: Vec::<usize>::new(),
+                start_idx: 0,
+                writer
             }
         }
     }
-    pub fn start(&self) -> Result<()> {
-        println!("Size: {}x{}", self.height, self.width);
-        execute!(stdout(), EnterAlternateScreen)
+    pub fn start(&mut self) -> Result<()> {
+        // Enter alternate screen and enter raw mode.
+        self.writer.execute(EnterAlternateScreen)
             .map_err(|err| RgmError{ message: err.to_string() })?;
         enable_raw_mode()
             .map_err(|err| RgmError{ message: err.to_string() })?;
@@ -101,28 +110,34 @@ impl Screen {
         Ok(())
     }
     
-    fn write_repos(&self) {
-        let mut out = stdout();
+    fn clear(&mut self) -> Result<()> {
+        self.writer.execute(cursor::MoveTo(0,0))
+            .map_err(|err| RgmError{ message: err.to_string() })?;
+        self.writer.execute(Clear(ClearType::All))
+            .map_err(|err| RgmError{ message: err.to_string() })?;
+        Ok(())
+    }
+    
+    fn write_repos(&mut self) -> Result<()> {
+        self.clear();
         let mut lines = 0;
         let mut idx = 0;
-        println!("Got size: {:?}x{:?}", self.height, self.width);
-        out.execute(cursor::MoveTo(0,0));
-        out.execute(Clear(ClearType::All));
         // TODO: Write repos in tree mode
-        // TODO: Refactor repos to be a vector of FlatPrinters.
         while lines < self.height - 1 {
             let repo = &self.repos.repos[idx];
-            // Add a field to_print to flat printer that is set here, determines whether or not to
-            // print line if there is available space on the screen given self.height.
-            let mut printer = FlatPrinter::new(&mut out, self.width, repo, self.longest_name);
-            if idx == self.focused {
-                printer.toggle_focused();
-            }
-            printer.print();
+            let mut printer = FlatPrinter::new(
+                self.width,
+                repo,
+                self.longest_name
+            );
+            if idx == self.focused { printer.toggle_focused(); }
+            if self.selected.contains(&idx) { printer.toggle_selected(); }
+            printer.print(&mut self.writer);
             lines += printer.height();
             idx += 1;
         }
-        out.flush();
+        self.writer.flush();
+        Ok(())
     }
     
     fn get_event(&self) -> Option<Event> {
@@ -168,7 +183,7 @@ impl Screen {
         let event = self.get_event();
         let action = self.handle_event(event);
         if action.needs_update() {
-            self.write_repos()
+            self.write_repos();
         }
         if action == Action::Exit {
             false
@@ -178,9 +193,10 @@ impl Screen {
     }
 }
 
-impl Drop for Screen {
+impl<T> Drop for Screen<T>
+where T: Write {
     fn drop(&mut self) {
-        execute!(stdout(), LeaveAlternateScreen).unwrap();
+        execute!(self.writer, LeaveAlternateScreen).unwrap();
         disable_raw_mode().unwrap();
     }
 }

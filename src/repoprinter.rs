@@ -17,15 +17,13 @@ const TREE_ITEM_LAST: &str = "└── ";
 // Printer trait to define print method.
 // Takes self, and an object that implements QueuableCommand, such as io::stdout() or
 // io::stderr().
-pub trait Printer {
-    fn print(&mut self) -> Result<()>;
+pub trait Printer<T> {
+    fn print(&self, writer: &mut T) -> Result<()>
+        where T: Write;
 }
 
-pub struct FlatPrinter<'a, 'b, T>
-where T: QueueableCommand + Write,
+pub struct FlatPrinter<'a>
 {
-    // Stdout, stderr, etc.
-    writer: &'b mut T,
     // Terminal Width
     width: usize,
     // Height in lines of repo
@@ -41,13 +39,10 @@ where T: QueueableCommand + Write,
     
 }
 
-impl<'a, 'b, T> FlatPrinter<'a, 'b, T> 
-where
-    T: QueueableCommand + Write
+impl<'a> FlatPrinter<'a> 
 {
-    pub fn new(writer: &'b mut T, width: usize, repo: &'a Repo, longest_name: usize) -> Self {
+    pub fn new(width: usize, repo: &'a Repo, longest_name: usize) -> Self {
         Self {
-            writer,
             width,
             height: 1,
             focused: false,
@@ -67,7 +62,9 @@ where
     pub fn toggle_focused(&mut self) { self.focused = !self.focused }
 
     // Four parts to the first line, [prefix][name][tabs][status]
-    fn print_main_line(&mut self) -> Result<()>{ 
+    fn print_main_line<W>(&self, writer: &mut W) -> Result<()>
+    where W: Write
+    { 
         let prefix = if self.expanded { String::from(EXPANDED) } else {String::from(COLLAPSED) };
         let name = self.repo.name.clone();
         let num_spaces = 5 + (self.longest_name - name.len());
@@ -83,9 +80,10 @@ where
             // Default
             (false, false) => (Color::White, Color::Reset)
         };
-        queue!(self.writer,
+        queue!(writer,
             SetBackgroundColor(bg),
             PrintStyledContent(prefix.with(fg)),
+            SetBackgroundColor(bg),
             PrintStyledContent(name.with(fg).attribute(Attribute::Underlined)),
             MoveRight(num_spaces as u16),
             PrintStyledContent(status.with(s_color)),
@@ -96,15 +94,17 @@ where
 }
 
 
-impl<T> Printer for FlatPrinter<'_, '_, T>
+impl<T> Printer<T> for FlatPrinter<'_>
 where
-    T: QueueableCommand + Write,
+    T: Write,
 {
-    fn print(&mut self) -> Result<()> {
+    fn print(&self, writer: &mut T) -> Result<()> 
+    where T: Write
+    {
         if self.expanded {
             unimplemented!();
         } else {
-            self.print_main_line();
+            self.print_main_line(writer);
         }
         Ok(())
     }
