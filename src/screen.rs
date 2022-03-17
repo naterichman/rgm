@@ -11,6 +11,7 @@ use crossterm::{
 };
 use std::ops::{Range, Drop};
 use std::io::{stdin, stdout, Write};
+use std::env::set_current_dir;
 use std::time::Duration;
 use crate::repo::{Repos, Repo, Status};
 use crate::error::{Result, RgmError};
@@ -206,6 +207,12 @@ where T: Write
                 self.repos[self.focused].toggle_expanded();
                 info!("Toggling expansion: {}",self.focused);
                 Action::ToggleCollapsed
+            },
+            KeyCode::Enter => {
+                let path = &self.repos[self.focused].get_repo().path;
+                set_current_dir(path).unwrap();
+                info!("Changing directories to: {}",path.display());
+                Action::Exit
             },
             _ => Action::Nil
         }
