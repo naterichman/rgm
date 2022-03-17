@@ -4,12 +4,14 @@ use repo::Repos;
 use std::process;
 use std::io::stdout;
 use screen::Screen;
+use logging::setup_log;
 
 mod args;
 mod repo;
 mod error;
 mod screen;
 mod repoprinter;
+mod logging;
 
 fn usage(){
     println!("rgm PATH")
@@ -24,6 +26,8 @@ fn get_repos_or_exit() -> Repos {
 }
 
 fn main() {
+    setup_log().unwrap();
+    log::info!("Set up logging");
     let cli = Cli::parse();
     match cli.command {
         Some(command) => match command {

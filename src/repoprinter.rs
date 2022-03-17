@@ -1,11 +1,13 @@
 use crossterm::{
     style::{Color, Attribute, Stylize, PrintStyledContent, Print, SetBackgroundColor},
     cursor::{MoveRight},
+    terminal::{Clear, ClearType},
     Result,
     queue, QueueableCommand
 };
 use crate::repo::{Repo, Status};
 use std::io::Write;
+use log::info;
 
 const COLLAPSED: &str = "▶ ";
 const EXPANDED: &str = "▼ ";
@@ -17,13 +19,31 @@ const TREE_ITEM_LAST: &str = "└── ";
 // Printer trait to define print method.
 // Takes self, and an object that implements QueuableCommand, such as io::stdout() or
 // io::stderr().
-pub trait Printer<T> {
-    fn print(&self, writer: &mut T) -> Result<()>
+pub trait RepoPrinter<T> {
+    // TODO: I don't like passing in longest name here, but
+    /// Print
+    fn print(&mut self, writer: &mut T, longest_name: usize) -> Result<()>
         where T: Write;
+
+    /// Get current height of printer
+    fn height(&self) -> usize;
+
+    /// Toggle whether printer is selected
+    fn toggle_selected(&mut self);
+
+    /// Toggle whether printer is expanded or collapsed
+    fn toggle_expanded(&mut self);
+
+    /// Toggle focused
+    fn toggle_focused(&mut self);
+
+    /// Accessor for repo
+    fn get_repo(&self) -> &Repo;
 }
 
-pub struct FlatPrinter<'a>
+pub struct FlatPrinter
 {
+    repo: Repo,
     // Terminal Width
     width: usize,
     // Height in lines of repo
@@ -32,42 +52,29 @@ pub struct FlatPrinter<'a>
     focused: bool,
     selected: bool,
     expanded: bool,
-    // Actual repo
-    repo: &'a Repo,
-
-    longest_name: usize,
     
 }
 
-impl<'a> FlatPrinter<'a> 
+impl FlatPrinter
 {
-    pub fn new(width: usize, repo: &'a Repo, longest_name: usize) -> Self {
+    pub fn new(repo: Repo, width: usize) -> Self {
         Self {
+            repo,
             width,
             height: 1,
             focused: false,
             selected: false,
             expanded: false,
-            repo,
-            longest_name
         }
     } 
 
-    pub fn height(&self) -> usize { self.height }
-
-    pub fn toggle_selected(&mut self) { self.selected = !self.selected }
-
-    pub fn toggle_expanded(&mut self) { self.expanded = !self.expanded }
-
-    pub fn toggle_focused(&mut self) { self.focused = !self.focused }
-
     // Four parts to the first line, [prefix][name][tabs][status]
-    fn print_main_line<W>(&self, writer: &mut W) -> Result<()>
+    fn print_main_line<W>(&self, writer: &mut W, longest_name: usize) -> Result<usize>
     where W: Write
     { 
         let prefix = if self.expanded { String::from(EXPANDED) } else {String::from(COLLAPSED) };
         let name = self.repo.name.clone();
-        let num_spaces = 5 + (self.longest_name - name.len());
+        let num_spaces = 5 + (longest_name - name.len());
         let (status, s_color) = self.repo.status.as_ref().unwrap_or(&Status::Other).display();
         // Set line background color based on whether line is selected and/or focused
         let (fg, bg) = match (self.focused, self.selected) {
@@ -89,23 +96,49 @@ impl<'a> FlatPrinter<'a>
             PrintStyledContent(status.with(s_color)),
             Print("\n\r")
         )?;
-        Ok(())
+        Ok(1)
+    }
+
+    fn print_details<W>(&self, writer: &mut W) -> Result<usize>
+    where W: Write
+    {
+        info!("Writing details");
+        let branch = format!("\tBranch: {}\r\n", self.repo.branch);
+        let remotes = format!("\tRemotes: {:?}\r\n", self.repo.remotes);
+        let alias = format!("\tAlias: {:?}\r\n", self.repo.alias);
+        let tags = format!("\tTags: {:?}\r\n", self.repo.tags);
+
+        queue!(writer,
+               Print(branch),
+               Print(remotes),
+               Print(alias),
+               Print(tags),
+        )?;
+        Ok(4)
+
     }
 }
 
 
-impl<T> Printer<T> for FlatPrinter<'_>
+impl<T> RepoPrinter<T> for FlatPrinter
 where
     T: Write,
 {
-    fn print(&self, writer: &mut T) -> Result<()> 
+    fn height(&self) -> usize { self.height }
+
+    fn toggle_selected(&mut self) { self.selected = !self.selected }
+
+    fn toggle_expanded(&mut self) { self.expanded = !self.expanded }
+
+    fn toggle_focused(&mut self) { self.focused = !self.focused }
+
+    fn get_repo(&self) -> &Repo { &self.repo }
+
+    fn print(&mut self, writer: &mut T, longest_name: usize) -> Result<()> 
     where T: Write
     {
-        if self.expanded {
-            unimplemented!();
-        } else {
-            self.print_main_line(writer);
-        }
+        self.height = self.print_main_line(writer, longest_name).unwrap();
+        if self.expanded { self.height += self.print_details(writer).unwrap(); }
         Ok(())
     }
 }

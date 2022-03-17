@@ -14,7 +14,8 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use crate::repo::{Repos, Repo, Status};
 use crate::error::{Result, RgmError};
-use crate::repoprinter::{FlatPrinter, Printer};
+use crate::repoprinter::{FlatPrinter, RepoPrinter};
+use log::{info};
 
 #[derive(Debug, PartialEq)]
 pub enum Action{
@@ -60,33 +61,37 @@ impl Action {
 pub struct Screen<T>
 where T: Write
 {
-    repos: Repos,
+    repos: Vec<Box<dyn RepoPrinter<T>>>,
     writer: T,
     height: usize,
     width: usize,
-    focused: usize,
     //
     longest_name: usize,
     tree_view: bool,
+    /// Index in self.repos where we start printing to screen
+    screen_start: usize,
+    /// Index in self.repos that is currently focused
+    focused: usize,
+    /// Indices that are currently selected
     selected: Vec<usize>,
-    start_idx: usize,
 }
 
 impl<T> Screen<T>
 where T: Write
 {
-    pub fn new(repos: Repos, writer: T) -> Self {
+    pub fn new(raw_repos: Repos, writer: T) -> Self {
         if !stdin().is_tty() { 
             // Run without screen
             unimplemented!()
         } else {
             let (width, height) = size().unwrap();
             let mut longest_name = 0;
-            for repo in repos.repos.iter() {
-                if repo.name.len() > longest_name {
-                    longest_name = repo.name.len();
-                }
+            let mut repos = Vec::<Box<dyn RepoPrinter<T>>>::new();
+            for repo in raw_repos.repos.into_iter() {
+                if repo.name.len() > longest_name { longest_name = repo.name.len(); }
+                repos.push(Box::new(FlatPrinter::new(repo, width as usize)));
             }
+            repos[0].toggle_focused();
             Self {
                 repos,
                 height: height as usize,
@@ -95,7 +100,7 @@ where T: Write
                 longest_name,
                 tree_view: false,
                 selected: Vec::<usize>::new(),
-                start_idx: 0,
+                screen_start: 0,
                 writer
             }
         }
@@ -119,21 +124,15 @@ where T: Write
     }
     
     fn write_repos(&mut self) -> Result<()> {
+        // TODO: Clear less if possible
         self.clear();
         let mut lines = 0;
-        let mut idx = 0;
+        let mut idx = self.screen_start;
         // TODO: Write repos in tree mode
         while lines < self.height - 1 {
-            let repo = &self.repos.repos[idx];
-            let mut printer = FlatPrinter::new(
-                self.width,
-                repo,
-                self.longest_name
-            );
-            if idx == self.focused { printer.toggle_focused(); }
-            if self.selected.contains(&idx) { printer.toggle_selected(); }
-            printer.print(&mut self.writer);
-            lines += printer.height();
+            let repo = &mut self.repos[idx];
+            repo.print(&mut self.writer, self.longest_name);
+            lines += repo.height();
             idx += 1;
         }
         self.writer.flush();
@@ -163,16 +162,50 @@ where T: Write
         match event.code {
             KeyCode::Char('q') => Action::Exit,
             KeyCode::Up => {
+                // Only move up if we're not at the beginning of repos
                 if self.focused != 0 {
-                    self.focused = self.focused - 1;
+                    if self.focused == self.screen_start {
+                        // We're at the top of the screen currently, need to shift our window up
+                        // one.
+                        self.screen_start -= 1;
+                    }
+                    // Move focused index up
+                    self.focused -= 1;
+                    // Unfocus previous line
+                    self.repos[self.focused + 1].toggle_focused();
+                    // Focus current line
+                    self.repos[self.focused].toggle_focused();
                 }
+                info!("focused: {}, screen_start: {}, height: {}",self.focused, self.screen_start, self.height);
                 Action::Move
             },
             KeyCode::Down => {
-                if self.focused != self.repos.repos.len() {
-                    self.focused = self.focused + 1;
+                // Only move down if we're not at the end of repos
+                if self.focused != self.repos.len() {
+                    if (self.focused - self.screen_start) == self.height - 2 {
+                        // We're at the bottom of the screen currently, need to shift our window
+                        // down one.
+                        self.screen_start += 1;
+                    }
+                    // Move focused index down
+                    self.focused += 1;
+                    // Unfocus previous line
+                    self.repos[self.focused - 1].toggle_focused();
+                    // Focus current line
+                    self.repos[self.focused].toggle_focused();
                 }
+                info!("focused: {}, screen_start: {}, height: {}",self.focused, self.screen_start, self.height);
                 Action::Move
+            },
+            KeyCode::Left => {
+                self.repos[self.focused].toggle_expanded();
+                info!("Toggling expansion: {}",self.focused);
+                Action::ToggleCollapsed
+            },
+            KeyCode::Right => {
+                self.repos[self.focused].toggle_expanded();
+                info!("Toggling expansion: {}",self.focused);
+                Action::ToggleCollapsed
             },
             _ => Action::Nil
         }
@@ -183,9 +216,10 @@ where T: Write
         let event = self.get_event();
         let action = self.handle_event(event);
         if action.needs_update() {
-            self.write_repos();
+            self.write_repos().unwrap();
         }
         if action == Action::Exit {
+            info!("Exiting");
             false
         } else {
             true
