@@ -19,3 +19,5 @@ clap = { version = "3.1.3", features = ["derive"] }
 walkdir = "2"
 git2 = "0.13"
 dirs = "4.0.0"
+log = "0.4.14"
+log4rs = "1.0.0"
