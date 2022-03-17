@@ -210,8 +210,11 @@ where T: Write
             },
             KeyCode::Enter => {
                 let path = &self.repos[self.focused].get_repo().path;
-                set_current_dir(path).unwrap();
-                info!("Changing directories to: {}",path.display());
+                // TODO: Call a shell script?  Set $PWD?
+                match set_current_dir(path) {
+                    Ok(_) => info!("Changing directories to: {}",path.display()),
+                    Err(e) => info!("{}", e.to_string())
+                }
                 Action::Exit
             },
             _ => Action::Nil
