@@ -13,6 +13,7 @@ use std::ops::{Range, Drop};
 use std::io::{stdin, stdout, Write};
 use std::env::set_current_dir;
 use std::time::Duration;
+use std::process::Command;
 use crate::repo::{Repos, Repo, Status};
 use crate::error::{Result, RgmError};
 use crate::repoprinter::{FlatPrinter, RepoPrinter};
@@ -210,11 +211,15 @@ where T: Write
             },
             KeyCode::Enter => {
                 let path = &self.repos[self.focused].get_repo().path;
-                // TODO: Call a shell script?  Set $PWD?
-                match set_current_dir(path) {
-                    Ok(_) => info!("Changing directories to: {}",path.display()),
-                    Err(e) => info!("{}", e.to_string())
-                }
+                // TODO: Going to need to create a shell entrypoint for rgm :( in order to be able
+                // to cd:
+                //
+                // function rgm {
+                //     _rgm $@  # Run binary with options, which creates a shell script
+                //     source ~/.config/rgm/cd.sh # Source the created shell script
+                //     cat /dev/null > ~/.config/rgm/cd.sh # Empty script
+                //  }
+
                 Action::Exit
             },
             _ => Action::Nil
