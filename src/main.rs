@@ -10,21 +10,25 @@ use std::{
 use logging::setup_log;
 use tui::{
     backend::{Backend, CrosstermBackend},
-    Terminal,
+    style::{Color, Modifier, Style},
+    text::Text,
     widgets::{Block, Borders, List, ListItem, ListState},
+    Terminal,
 };
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use repoview::RepoView;
+
+use crate::repo::Repo;
 
 mod args;
 mod repo;
 mod error;
-mod screen;
-mod repoprinter;
 mod logging;
+mod repoview;
 
 fn usage(){
     println!("rgm PATH")
@@ -75,7 +79,9 @@ fn main() {
         None => {
             let repos = Repos::load();
             match repos {
-                Ok(r) => run_interactive(repos),
+                Ok(r) => if let Some(e) = run_interactive(r).err() {
+                    println!("{:?}",e)
+                },
                 Err(e) => println!("{:?}", e)
             }
             //match repos {
@@ -132,8 +138,18 @@ impl<T> StatefulList<T> {
     }
 }
 
-struct App<'a> {
+struct App {
     items: StatefulList<Repo>,
+    expanded: Vec<usize>
+}
+
+impl App {
+    pub fn new(repos: Repos) -> Self {
+        Self {
+            items: StatefulList::with_items(repos.repos),
+            expanded: Vec::<usize>::new(),
+        }
+    }
 }
 
 pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
@@ -145,35 +161,40 @@ pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
 
     // create app and run it
     let tick_rate = Duration::from_millis(250);
+    let mut last_tick = Instant::now();
+    let mut app = App::new(repos);
     loop {
-        terminal.draw(|f|{
+        terminal.draw(|f| {
             let size = f.size();
             let items: Vec<ListItem> = app
                 .items
                 .items
                 .iter()
-                .map(|i| {
+                .enumerate()
+                .map(|(i, repo)| {
                     // TODO: RepoView::get_text
-                    let mut lines = vec![Spans::from(i.0)];
-                    for _ in 0..i.1 {
-                        lines.push(Spans::from(Span::styled(
-                            "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-                            Style::default().add_modifier(Modifier::ITALIC),
-                        )));
-                    }
-                    ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
+                    let repo_view = RepoView::new(
+                        &repo,
+                        0,
+                        app.expanded.contains(&i),
+                        false,
+                        10u8
+                    );
+
+                    ListItem::new::<Text>(repo_view.text().into())
+                        .style(Style::default().bg(Color::Reset))
                 })
                 .collect();
 
             // Create a List from all list items and highlight the currently selected one
             let items = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("List"))
+                .block(Block::default().borders(Borders::ALL).title("Repositories"))
                 .highlight_style(
                     Style::default()
-                        .bg(Color::LightGreen)
+                        .bg(Color::LightBlue)
+                        .fg(Color::DarkGray)
                         .add_modifier(Modifier::BOLD),
-                )
-                .highlight_symbol(">> ");
+                );
 
             // We can now render the item list
             f.render_stateful_widget(items, size, &mut app.items.state);
@@ -182,11 +203,11 @@ pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
+
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Left => app.items.unselect(),
+                    KeyCode::Char('q') => break,
                     KeyCode::Down => app.items.next(),
                     KeyCode::Up => app.items.previous(),
                     _ => {}
@@ -194,10 +215,8 @@ pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
             }
         }
         if last_tick.elapsed() >= tick_rate {
-            app.on_tick();
             last_tick = Instant::now();
         }
-    }
     }
     disable_raw_mode()?;
     execute!(
@@ -206,10 +225,6 @@ pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
         DisableMouseCapture
     )?;
     terminal.show_cursor()?;
-
-    if let Err(err) = res {
-        println!("{:?}", err)
-    }
 
     Ok(())
 }
