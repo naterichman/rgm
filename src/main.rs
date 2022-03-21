@@ -178,10 +178,9 @@ pub fn run_interactive(repos: Repos) -> Result<(), Box<dyn Error>>{
                         0,
                         app.expanded.contains(&i),
                         false,
-                        10u8
+                        30u8
                     );
-
-                    ListItem::new::<Text>(repo_view.text().into())
+                    ListItem::new(repo_view.text())
                         .style(Style::default().bg(Color::Reset))
                 })
                 .collect();

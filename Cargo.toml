@@ -20,4 +20,5 @@ git2 = "0.13"
 dirs = "4.0.0"
 log = "0.4.14"
 log4rs = "1.0.0"
-tui = "0.17.0"
+tui = { version = "0.17.0", features = ["crossterm"] }
+crossterm = "0.23.1"

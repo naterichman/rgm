@@ -32,23 +32,23 @@ impl<'a> RepoView<'a> {
         }
     }
 
-    pub fn text(&self) -> Text {
-        Text::from(self.main_line())
-    }
-
-    pub fn main_line(&self) -> Spans {
+    pub fn text(self) -> Vec<Spans<'a>> {
         let prefix = if self.expanded { String::from(EXPANDED) } else {String::from(COLLAPSED) };
         let name = self.repo.name.clone();
-        let num_spaces =  self.status_start - name.len() as u8;
+        let num_spaces =  10u8;//self.status_start - name.len() as u8;
         let spaces = (0..num_spaces).map(|_| " ").collect::<String>();
         let status = self.repo.status.as_ref().unwrap_or(&Status::Other);
-        Spans::from(vec![
+        let mut spans = Vec::<Spans>::new();
+        let first_line = Spans::from(vec![
             Span::raw(prefix),
             Span::raw(name),
             Span::raw(spaces),
             Span::styled(status.display(), Style::default().fg(get_color_for_status(status)))
-        ])
+        ]);
+        spans.push(first_line);
+        spans
     }
+
 }
 
 pub fn get_color_for_status(status: &Status) -> Color {
