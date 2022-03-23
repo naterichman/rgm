@@ -9,6 +9,7 @@ const EXPANDED: &str = "▼ ";
 
 pub struct RepoView<'a> {
     repo: &'a Repo,
+    longest_name: usize,
     indent: u8,
     expanded: bool,
     selected: bool,
@@ -18,6 +19,7 @@ pub struct RepoView<'a> {
 impl<'a> RepoView<'a> {
     pub fn new(
         repo: &'a Repo, 
+        longest_name: usize,
         indent: u8,
         expanded: bool,
         selected: bool,
@@ -25,6 +27,7 @@ impl<'a> RepoView<'a> {
     ) -> Self {
         Self {
             repo,
+            longest_name,
             indent,
             expanded,
             selected,
@@ -35,7 +38,7 @@ impl<'a> RepoView<'a> {
     pub fn text(self) -> Vec<Spans<'a>> {
         let prefix = if self.expanded { String::from(EXPANDED) } else {String::from(COLLAPSED) };
         let name = self.repo.name.clone();
-        let num_spaces =  10u8;//self.status_start - name.len() as u8;
+        let num_spaces =  (self.longest_name - name.len()) + 3;
         let spaces = (0..num_spaces).map(|_| " ").collect::<String>();
         let status = self.repo.status.as_ref().unwrap_or(&Status::Other);
         let mut spans = Vec::<Spans>::new();
@@ -46,6 +49,12 @@ impl<'a> RepoView<'a> {
             Span::styled(status.display(), Style::default().fg(get_color_for_status(status)))
         ]);
         spans.push(first_line);
+        if self.expanded {
+            spans.push(Spans::from(format!("    Branch: {}\r\n", self.repo.branch)));
+            spans.push(Spans::from(format!("    Remotes: {:?}\r\n", self.repo.remotes)));
+            spans.push(Spans::from(format!("    Alias: {:?}\r\n", self.repo.alias)));
+            spans.push(Spans::from(format!("    Tags: {:?}\r\n", self.repo.tags)));
+        }
         spans
     }
 
