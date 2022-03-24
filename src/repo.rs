@@ -198,6 +198,14 @@ impl Repos {
             .map_err(|err| RgmError { message: err.to_string() })?;
         Ok(repos)
     }
+
+    pub fn longest_name(&self) -> usize {
+        let mut longest = 0;
+        for repo in self.repos.iter(){
+            if repo.name.len() > longest { longest = repo.name.len() }
+        }
+        longest
+    }
 }
 
 impl From<&PathBuf> for Repos {
