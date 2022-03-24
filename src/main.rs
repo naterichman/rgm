@@ -1,17 +1,17 @@
 use args::{Cli, Commands};
 use clap::Parser;
-use repo::Repos;
-use std::process;
-use std::io::stdout;
-use screen::Screen;
+use std::{process, io};
 use logging::setup_log;
+
+use crate::repo::Repos;
+use crate::screen::Screen;
 
 mod args;
 mod repo;
 mod error;
-mod screen;
-mod repoprinter;
 mod logging;
+mod repoview;
+mod screen;
 
 fn usage(){
     println!("rgm PATH")
@@ -63,26 +63,14 @@ fn main() {
             let repos = Repos::load();
             match repos {
                 Ok(r) => {
-                    let mut screen = Screen::new(r, stdout());
-                    if let Err(e) = screen.start() {
-                        println!("{}", e);
+                    let mut screen = Screen::new(r);
+                    let mut out = io::stdout();
+                    if let Err(e) = screen.run(out) {
+                        println!("{:?}", e)
                     }
-                    loop {
-                        if !screen.update() {
-                            break
-                        }
-                    }
-                }
+                },
                 Err(e) => println!("{:?}", e)
             }
-            //match repos {
-            //   Ok(r) => {
-            //        for val in r.repos.iter() {
-            //            println!("{:?}", val)
-            //        }
-            //    },
-            //    Err(e) => println!("{:?}", e)
-           // }
         }
     }
 }

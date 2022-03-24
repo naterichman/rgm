@@ -7,7 +7,6 @@ use std::convert;
 use serde::{Deserialize, Serialize};
 use crate::error::{Result,RgmError};
 use walkdir::WalkDir;
-use crossterm::style::Color;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
@@ -27,15 +26,15 @@ pub enum Status {
 }
 
 impl Status {
-    pub fn display(&self) -> (String, Color) {
+    pub fn display(&self) -> &str {
         match self {
-            Status::Bare => (String::from("Empty"), Color::White),
+            Status::Bare => "Empty",
             // Todo
-            Status::Diverged(_,_) => (String::from("Diverged"),Color::Red),
-            Status::Clean => (String::from("Clean"), Color::Green),
-            Status::Dirty => (String::from("Dirty"), Color::Yellow),
-            Status::Detached => (String::from("Detached"), Color::Red),
-            Status::Other => (String::from("Other"), Color::White)
+            Status::Diverged(_,_) => "Diverged",
+            Status::Clean => "Clean",
+            Status::Dirty => "Dirty",
+            Status::Detached => "Detached",
+            Status::Other => "Other",
         }
     }
 }
@@ -198,6 +197,14 @@ impl Repos {
         let repos: Repos = serde_json::from_str::<Repos>(&contents)
             .map_err(|err| RgmError { message: err.to_string() })?;
         Ok(repos)
+    }
+
+    pub fn longest_name(&self) -> usize {
+        let mut longest = 0;
+        for repo in self.repos.iter(){
+            if repo.name.len() > longest { longest = repo.name.len() }
+        }
+        longest
     }
 }
 
