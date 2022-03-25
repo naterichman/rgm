@@ -15,13 +15,17 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use log::{info, debug};
 use crate::repoview::RepoView;
 use crate::repo::{Repos, Repo};
+use crate::utils;
 
 pub struct Screen {
     items: StatefulList<Repo>,
     expanded: Vec<usize>,
     longest_name: usize,
+    select_mode: bool,
+    selected: Vec<usize>,
 }
 
 
@@ -31,7 +35,9 @@ impl Screen {
         Self {
             items: StatefulList::new(repos.repos),
             expanded: Vec::<usize>::new(),
-            longest_name: longest
+            longest_name: longest,
+            select_mode: false,
+            selected: Vec::<usize>::new(),
         }
     }
     fn get_terminal<W>(mut writer: W) -> Result<Terminal<CrosstermBackend<W>>, Box<dyn Error>> 
@@ -78,6 +84,8 @@ impl Screen {
                 .iter()
                 .enumerate()
                 .map(|(i, repo)| {
+                    // TODO: Add selected as a param here, change color of Status for better
+                    // rendering on background
                     let repo_view = RepoView::new(
                         &repo,
                         self.longest_name,
@@ -86,8 +94,14 @@ impl Screen {
                         false,
                         30u8
                     );
+                    let selected = self.selected.contains(&i);
+                    let (b_color, f_color) = if selected { 
+                        (Color::Rgb(40,40,40), Color::White)
+                    } else {
+                        (Color::Reset, Color::White)
+                    };
                     ListItem::new(repo_view.text())
-                        .style(Style::default().bg(Color::Reset))
+                        .style(Style::default().bg(b_color).fg(f_color))
                 })
                 .collect();
 
@@ -97,7 +111,7 @@ impl Screen {
                 .highlight_style(
                     Style::default()
                         .bg(Color::LightBlue)
-                        .fg(Color::DarkGray)
+                        .fg(Color::Black)
                         .add_modifier(Modifier::BOLD),
                 );
 
@@ -135,19 +149,44 @@ impl Screen {
         if let Event::Key(key) = raw_evt {
             match key.code {
                 KeyCode::Char('q') => return true,
-                KeyCode::Down => self.items.next(),
-                KeyCode::Up => self.items.previous(),
-                KeyCode::Left | KeyCode::Right => if let Some(i) = self.items.selected() {
-                    if self.expanded.contains(&i) {
-                        self.expanded.retain(|&x| x != i);
-                    } else {
-                        self.expanded.push(i);
+                KeyCode::Char('v') => self.select_current(),
+                KeyCode::Char('V') => self.start_select_range(),
+                KeyCode::Down => {
+                    if self.select_mode {
+                        self.select_current();
                     }
+                    self.items.next();
                 },
+                KeyCode::Up => {
+                    if self.select_mode {
+                        self.select_current();
+                    }
+                    self.items.previous();
+                },
+                KeyCode::Left | KeyCode::Right => self.toggle_expanded(),
                 _ => {}
             }
         }
         false
+    }
+
+    fn select_current(&mut self) {
+        if let Some(s) = self.items.selected(){
+            debug!("Selecting {}", s);
+            utils::set_item_in_vec(&mut self.selected, s);
+        }
+    }
+
+    fn start_select_range(&mut self) {
+        self.select_mode = true;
+        debug!("Starting select range");
+        self.select_current()
+    }
+
+    fn toggle_expanded(&mut self){
+        if let Some(s) = self.items.selected(){
+            utils::toggle_item_in_vec(&mut self.expanded, s);
+        }
     }
 }
 

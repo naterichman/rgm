@@ -1,6 +1,6 @@
 use args::{Cli, Commands};
 use clap::Parser;
-use std::{process, io};
+use std::io;
 use logging::setup_log;
 
 use crate::repo::Repos;
@@ -12,18 +12,12 @@ mod error;
 mod logging;
 mod repoview;
 mod screen;
+mod utils;
 
 fn usage(){
     println!("rgm PATH")
 }
 
-fn get_repos_or_exit() -> Repos {
-    let repos = Repos::load();
-    match repos {
-        Ok(r) => r,
-        Err(_) => process::exit(1)
-    }
-}
 
 fn main() {
     setup_log().unwrap();
@@ -32,7 +26,7 @@ fn main() {
     match cli.command {
         Some(command) => match command {
             Commands::Tag{mut tags, path} => {
-                let mut repos = get_repos_or_exit();
+                let mut repos = utils::get_repos_or_exit();
                 for r in repos.repos.iter_mut(){
                     // if r.path is a subdirectory of path
                     if r.path.starts_with(&path){
@@ -41,7 +35,7 @@ fn main() {
                 }
             },
             Commands::Alias{alias, path} => {
-                let mut repos = get_repos_or_exit();
+                let mut repos = utils::get_repos_or_exit();
                 // Match on path
                 for r in repos.repos.iter_mut() {
                     if r.path == path {
