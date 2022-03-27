@@ -1,6 +1,6 @@
-use crate::repo::{Repo, Repos};
+use crate::input::Input;
+use crate::repo::Repos;
 use crate::repoview::RepoView;
-use crate::utils;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
@@ -14,48 +14,31 @@ use std::{
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::Text,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Terminal,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    terminal::{Frame, Terminal},
+    widgets::{Block, Paragraph},
 };
 
-pub struct Input {
-    editing: bool,
-    text: String,
-}
-
-impl Default for Input {
-    fn default() -> Self {
-        Self {
-            editing: false,
-            text: String::from(":"),
-        }
-    }
+pub trait Draw {
+    fn draw<B: Backend>(&mut self, frame: &mut Frame<B>, area: Rect);
 }
 
 pub struct Screen {
-    items: StatefulList<Repo>,
-    expanded: Vec<usize>,
-    longest_name: usize,
-    select_mode: bool,
-    selected: Vec<usize>,
+    repoview: RepoView,
     input: Input,
 }
 
 impl Screen {
     pub fn new(repos: Repos) -> Self {
         let longest = repos.longest_name();
+        let repoview = RepoView::new(repos);
         Self {
-            items: StatefulList::new(repos.repos),
-            expanded: Vec::<usize>::new(),
-            longest_name: longest,
-            select_mode: false,
-            selected: Vec::<usize>::new(),
+            repoview,
             input: Input::default(),
         }
     }
+
     fn get_terminal<W>(mut writer: W) -> Result<Terminal<CrosstermBackend<W>>, Box<dyn Error>>
     where
         W: io::Write,
@@ -102,46 +85,15 @@ impl Screen {
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(&size.height - 1), Constraint::Length(1)].as_ref())
                 .split(size);
-            let items: Vec<ListItem> = self
-                .items
-                .items
-                .iter()
-                .enumerate()
-                .map(|(i, repo)| {
-                    // TODO: Add selected as a param here, change color of Status for better
-                    // rendering on background
-                    let repo_view = RepoView::new(
-                        &repo,
-                        self.longest_name,
-                        0,
-                        self.expanded.contains(&i),
-                        false,
-                        30u8,
-                    );
-                    let selected = self.selected.contains(&i);
-                    let (b_color, f_color) = if selected {
-                        (Color::Rgb(40, 40, 40), Color::White)
-                    } else {
-                        (Color::Reset, Color::White)
-                    };
-                    ListItem::new(repo_view.text()).style(Style::default().bg(b_color).fg(f_color))
-                })
-                .collect();
 
-            // Create a List from all list items and highlight the currently selected one
-            let items = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Repositories"))
-                .highlight_style(
-                    Style::default()
-                        .bg(Color::LightBlue)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD),
-                );
             // Render list of repos
-            f.render_stateful_widget(items, chunks[0], &mut self.items.state);
+            {
+                self.repoview.draw(f, chunks[0]);
+            }
             // Render input
-            let input = Paragraph::new(self.input.text.as_ref()).block(Block::default());
-            f.render_widget(input, chunks[1]);
+            {
+                self.input.draw(f, chunks[1]);
+            }
         });
         match res {
             Ok(_) => true,
@@ -169,35 +121,35 @@ impl Screen {
         };
 
         if let Event::Key(key) = raw_evt {
-            if self.input.editing {
+            if self.input.is_editing() {
                 match key.code {
-                    KeyCode::Char(x) => self.input.text.push(x),
+                    KeyCode::Char(x) => self.input.push(x),
                     KeyCode::Enter => self.parse_command(),
                     KeyCode::Backspace => {
-                        self.input.text.pop();
+                        self.input.pop();
                     }
                     _ => {}
                 }
             } else {
                 match key.code {
                     KeyCode::Char('q') => return true,
-                    KeyCode::Char('v') => self.select_current(),
-                    KeyCode::Char('V') => self.start_select_range(),
-                    KeyCode::Char(':') | KeyCode::Char('/') => self.input.editing = true,
+                    KeyCode::Char('v') => self.repoview.select_current(),
+                    KeyCode::Char('V') => self.repoview.start_select_range(),
+                    KeyCode::Char(':') | KeyCode::Char('/') => self.input.editing(true),
                     //KeyCode::Char('a') => self.apply_alias(),
                     KeyCode::Down => {
-                        if self.select_mode {
-                            self.select_current();
+                        if self.repoview.select_mode {
+                            self.repoview.select_current();
                         }
-                        self.items.next();
+                        self.repoview.next();
                     }
                     KeyCode::Up => {
-                        if self.select_mode {
-                            self.select_current();
+                        if self.repoview.select_mode {
+                            self.repoview.select_current();
                         }
-                        self.items.previous();
+                        self.repoview.previous();
                     }
-                    KeyCode::Left | KeyCode::Right => self.toggle_expanded(),
+                    KeyCode::Left | KeyCode::Right => self.repoview.toggle_expanded(),
                     _ => {}
                 }
             }
@@ -206,79 +158,22 @@ impl Screen {
     }
 
     fn parse_command(&mut self) {
-        self.input.text.remove(0);
-        let command_char = self.input.text.remove(0);
-        match command_char {
-            '/' => unimplemented!(), // Search
-            't' => unimplemented!(), // Tag
-            'a' => unimplemented!(), // Alias
-            _ => {}
+        // Command format: `:<command> <args>`
+        let input = self.input.text();
+        let cmd_str: Vec<&str> = input.split(" ").collect();
+        if cmd_str.len() < 1 {
+            self.input = Input::warning(String::from("No command"));
+            return;
         }
-    }
-
-    fn select_current(&mut self) {
-        if let Some(s) = self.items.selected() {
-            debug!("Selecting {}", s);
-            utils::set_item_in_vec(&mut self.selected, s);
-        }
-    }
-
-    fn start_select_range(&mut self) {
-        self.select_mode = true;
-        debug!("Starting select range");
-        self.select_current()
-    }
-
-    fn toggle_expanded(&mut self) {
-        if let Some(s) = self.items.selected() {
-            utils::toggle_item_in_vec(&mut self.expanded, s);
-        }
-    }
-}
-
-// Basic stateful list from example on tui-rs
-struct StatefulList<T> {
-    state: ListState,
-    items: Vec<T>,
-}
-
-impl<T> StatefulList<T> {
-    fn new(items: Vec<T>) -> StatefulList<T> {
-        StatefulList {
-            state: ListState::default(),
-            items,
-        }
-    }
-
-    fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.items.len() - 1 {
-                    0
-                } else {
-                    i + 1
+        match cmd_str[0] {
+            ":/" => unimplemented!(), // Search
+            ":t" => self.repoview.tag_command(&cmd_str[1..]),
+            ":a" => {
+                if let Err(e) = self.repoview.alias_command(&cmd_str[1..]) {
+                    self.input = e;
                 }
             }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
-
-    fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.items.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
-
-    fn selected(&self) -> Option<usize> {
-        self.state.selected()
+            _ => self.input.editing(false),
+        }
     }
 }

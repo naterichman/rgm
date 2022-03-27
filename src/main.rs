@@ -8,8 +8,10 @@ use crate::screen::Screen;
 
 mod args;
 mod error;
+mod input;
 mod logging;
 mod repo;
+mod repoitem;
 mod repoview;
 mod screen;
 mod utils;

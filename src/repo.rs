@@ -84,8 +84,8 @@ impl Repo {
         unimplemented!()
     }
 
-    pub fn add_tags(&mut self, tags: &mut Vec<String>) {
-        self.tags.append(tags);
+    pub fn add_tags(&mut self, add_tags: &mut Vec<String>) {
+        self.tags.append(add_tags);
     }
 
     pub fn add_alias(&mut self, alias: String) {
