@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct RgmError {
-    pub message: String
+    pub message: String,
 }
 pub type Result<T> = std::result::Result<T, RgmError>;
 

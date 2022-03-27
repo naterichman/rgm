@@ -1,11 +1,11 @@
-use git2::{Repository, Error as GitError, StatusOptions, ErrorCode};
-use std::path::PathBuf;
+use crate::error::{Result, RgmError};
+use git2::{Error as GitError, ErrorCode, Repository, StatusOptions};
+use serde::{Deserialize, Serialize};
+use std::convert;
+use std::fmt;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::fmt;
-use std::convert;
-use serde::{Deserialize, Serialize};
-use crate::error::{Result,RgmError};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,7 +22,7 @@ pub enum Status {
     // In a head detached state
     Detached,
     // TODO: Others? Merge/rebase in progress?
-    Other
+    Other,
 }
 
 impl Status {
@@ -30,7 +30,7 @@ impl Status {
         match self {
             Status::Bare => "Empty",
             // Todo
-            Status::Diverged(_,_) => "Diverged",
+            Status::Diverged(_, _) => "Diverged",
             Status::Clean => "Clean",
             Status::Dirty => "Dirty",
             Status::Detached => "Detached",
@@ -65,7 +65,7 @@ impl Repo {
         status: Option<Status>,
         remotes: Vec<String>,
         alias: Option<String>,
-        tags: Vec<String>
+        tags: Vec<String>,
     ) -> Self {
         Self {
             path,
@@ -74,7 +74,7 @@ impl Repo {
             status,
             remotes,
             alias,
-            tags
+            tags,
         }
     }
 
@@ -102,32 +102,35 @@ impl convert::TryFrom<Repository> for Repo {
         let mut stat_opts = StatusOptions::new();
         let status = match raw.statuses(Some(&mut stat_opts)) {
             Ok(status_raw) => {
-                // TODO: determine between clean, detached, behind, ahead 
-                if status_raw.is_empty(){
+                // TODO: determine between clean, detached, behind, ahead
+                if status_raw.is_empty() {
                     local_remote_diff(&raw, "origin").ok()
+                } else {
+                    Some(Status::Dirty)
                 }
-                else { Some(Status::Dirty) }
             }
             Err(e) => {
-                if e.code() == ErrorCode::BareRepo { Some(Status::Bare) }
-                else { None }
+                if e.code() == ErrorCode::BareRepo {
+                    Some(Status::Bare)
+                } else {
+                    None
+                }
             }
         };
         let repo_path = raw.workdir().unwrap().to_path_buf();
-        let name = String::from(repo_path
-            .as_path()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap());
+        let name = String::from(repo_path.as_path().file_name().unwrap().to_str().unwrap());
         Ok(Repo {
             path: repo_path,
             name: name,
             branch: rev.to_string(),
             status: status,
-            remotes: raw.remotes()?.iter().map(|x| x.unwrap().to_string()).collect(),
+            remotes: raw
+                .remotes()?
+                .iter()
+                .map(|x| x.unwrap().to_string())
+                .collect(),
             alias: None,
-            tags: vec![]
+            tags: vec![],
         })
     }
 }
@@ -139,13 +142,17 @@ impl fmt::Display for Repo {
     }
 }
 
-fn local_remote_diff(repo: &Repository, remote: &str) -> std::result::Result<Status, Box<dyn std::error::Error>> {
+fn local_remote_diff(
+    repo: &Repository,
+    remote: &str,
+) -> std::result::Result<Status, Box<dyn std::error::Error>> {
     // Get local head
     let head = repo.head()?;
     let local_head = head.peel_to_commit()?;
     let remote = format!("{}/{}", remote, head.shorthand().unwrap());
     // Get remote head
-    let remote_head = repo.resolve_reference_from_short_name(&remote)?
+    let remote_head = repo
+        .resolve_reference_from_short_name(&remote)?
         .peel_to_commit()?;
     // Get diff with `repo.graph_ahead_behind(local, remote)`
     let (behind, ahead) = repo.graph_ahead_behind(local_head.id(), remote_head.id())?;
@@ -159,15 +166,14 @@ fn local_remote_diff(repo: &Repository, remote: &str) -> std::result::Result<Sta
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Meta {
-    pub size: usize
+    pub size: usize,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Repos {
     pub repos: Vec<Repo>,
-    pub meta: Meta
+    pub meta: Meta,
 }
-
 
 fn config_file() -> PathBuf {
     let mut home = dirs::home_dir().unwrap();
@@ -176,33 +182,47 @@ fn config_file() -> PathBuf {
 }
 
 impl Repos {
-
     pub fn save(&self) -> Result<PathBuf> {
         let file_name = config_file();
-        let mut file = OpenOptions::new().write(true).create(true).open(&file_name)
-            .map_err(|err| RgmError { message: err.to_string() })?;
-        let json = serde_json::to_string(&self)
-            .map_err(|err| RgmError { message: err.to_string() })?;
-        file.write(&json.as_bytes())
-            .map_err(|err| RgmError { message: err.to_string() })?;
-        return Ok(file_name)
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&file_name)
+            .map_err(|err| RgmError {
+                message: err.to_string(),
+            })?;
+        let json = serde_json::to_string(&self).map_err(|err| RgmError {
+            message: err.to_string(),
+        })?;
+        file.write(&json.as_bytes()).map_err(|err| RgmError {
+            message: err.to_string(),
+        })?;
+        return Ok(file_name);
     }
-    
+
     pub fn load() -> Result<Self> {
-        let mut file = OpenOptions::new().read(true).open(config_file())
-            .map_err(|err| RgmError { message: err.to_string() })?;
+        let mut file = OpenOptions::new()
+            .read(true)
+            .open(config_file())
+            .map_err(|err| RgmError {
+                message: err.to_string(),
+            })?;
         let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .map_err(|err| RgmError { message: err.to_string() })?;
-        let repos: Repos = serde_json::from_str::<Repos>(&contents)
-            .map_err(|err| RgmError { message: err.to_string() })?;
+        file.read_to_string(&mut contents).map_err(|err| RgmError {
+            message: err.to_string(),
+        })?;
+        let repos: Repos = serde_json::from_str::<Repos>(&contents).map_err(|err| RgmError {
+            message: err.to_string(),
+        })?;
         Ok(repos)
     }
 
     pub fn longest_name(&self) -> usize {
         let mut longest = 0;
-        for repo in self.repos.iter(){
-            if repo.name.len() > longest { longest = repo.name.len() }
+        for repo in self.repos.iter() {
+            if repo.name.len() > longest {
+                longest = repo.name.len()
+            }
         }
         longest
     }
@@ -243,14 +263,15 @@ impl From<&PathBuf> for Repos {
                         Ok(v) => repos.push(v),
                         Err(s) => println!(
                             "Couldn't get repo info at path: {} err: {:?}",
-                            entry.path().display(), s
+                            entry.path().display(),
+                            s
                         ),
                     }
                 }
             }
         }
-        Repos{ 
-            meta: Meta{ size: repos.len() },
+        Repos {
+            meta: Meta { size: repos.len() },
             repos,
         }
     }

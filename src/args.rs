@@ -33,5 +33,5 @@ pub enum Commands {
     Import {
         #[clap(required = true, parse(from_os_str))]
         path: PathBuf,
-    }
+    },
 }
