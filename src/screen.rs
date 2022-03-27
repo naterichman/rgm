@@ -5,9 +5,10 @@ use std::{
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
+    layout::{Direction, Layout, Constraint},
     style::{Color, Modifier, Style},
     text::Text,
-    widgets::{Block, Borders, List, ListItem, ListState},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Terminal,
 };
 use crossterm::{
@@ -20,12 +21,28 @@ use crate::repoview::RepoView;
 use crate::repo::{Repos, Repo};
 use crate::utils;
 
+pub struct Input {
+    editing: bool,
+    text: String,
+}
+
+impl Default for Input {
+    fn default() -> Self {
+        Self {
+            editing: false,
+            text: String::from(":")
+        }
+    }
+}
+
+
 pub struct Screen {
     items: StatefulList<Repo>,
     expanded: Vec<usize>,
     longest_name: usize,
     select_mode: bool,
     selected: Vec<usize>,
+    input: Input
 }
 
 
@@ -38,6 +55,7 @@ impl Screen {
             longest_name: longest,
             select_mode: false,
             selected: Vec::<usize>::new(),
+            input: Input::default()
         }
     }
     fn get_terminal<W>(mut writer: W) -> Result<Terminal<CrosstermBackend<W>>, Box<dyn Error>> 
@@ -78,6 +96,14 @@ impl Screen {
     fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> bool {
         let res = terminal.draw(|f| {
             let size = f.size();
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(&size.height - 1),
+                        Constraint::Length(1)
+                    ].as_ref())
+                .split(size);
             let items: Vec<ListItem> = self
                 .items
                 .items
@@ -114,9 +140,12 @@ impl Screen {
                         .fg(Color::Black)
                         .add_modifier(Modifier::BOLD),
                 );
-
-            // We can now render the item list
-            f.render_stateful_widget(items, size, &mut self.items.state);
+            // Render list of repos
+            f.render_stateful_widget(items, chunks[0], &mut self.items.state);
+            // Render input
+            let input = Paragraph::new(self.input.text.as_ref())
+                .block(Block::default());
+            f.render_widget(input, chunks[1]);
         });
         match res {
             Ok(_) => true,
@@ -147,27 +176,49 @@ impl Screen {
         };
 
         if let Event::Key(key) = raw_evt {
-            match key.code {
-                KeyCode::Char('q') => return true,
-                KeyCode::Char('v') => self.select_current(),
-                KeyCode::Char('V') => self.start_select_range(),
-                KeyCode::Down => {
-                    if self.select_mode {
-                        self.select_current();
-                    }
-                    self.items.next();
-                },
-                KeyCode::Up => {
-                    if self.select_mode {
-                        self.select_current();
-                    }
-                    self.items.previous();
-                },
-                KeyCode::Left | KeyCode::Right => self.toggle_expanded(),
-                _ => {}
+            if self.input.editing {
+                match key.code {
+                    KeyCode::Char(x) => self.input.text.push(x),
+                    KeyCode::Enter => self.parse_command(),
+                    KeyCode::Backspace => { self.input.text.pop(); },
+                    _ => {}
+                }
+            } else {
+                match key.code {
+                    KeyCode::Char('q') => return true,
+                    KeyCode::Char('v') => self.select_current(),
+                    KeyCode::Char('V') => self.start_select_range(),
+                    KeyCode::Char(':') | KeyCode::Char('/') => self.input.editing = true,
+                    //KeyCode::Char('a') => self.apply_alias(),
+                    KeyCode::Down => {
+                        if self.select_mode {
+                            self.select_current();
+                        }
+                        self.items.next();
+                    },
+                    KeyCode::Up => {
+                        if self.select_mode {
+                            self.select_current();
+                        }
+                        self.items.previous();
+                    },
+                    KeyCode::Left | KeyCode::Right => self.toggle_expanded(),
+                    _ => {}
+                }
             }
         }
         false
+    }
+
+    fn parse_command(&mut self) {
+        self.input.text.remove(0);
+        let command_char = self.input.text.remove(0);
+        match command_char {
+            '/' => unimplemented!(), // Search
+            't' => unimplemented!(), // Tag
+            'a' => unimplemented!(), // Alias
+            _ => {}
+        }
     }
 
     fn select_current(&mut self) {
