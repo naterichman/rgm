@@ -8,8 +8,8 @@ use tui::{
 };
 pub enum InputStatus {
     Error,
-    Info,
     Warning,
+    Info,
 }
 
 pub struct Input {
@@ -40,11 +40,18 @@ impl Input {
     }
 
     pub fn pop(&mut self) {
-        self.text.pop();
+        // Leave command prompt
+        if self.text.len() > 1 {
+            self.text.pop();
+        }
     }
 
     pub fn editing(&mut self, v: bool) {
         self.editing = v;
+        if v {
+            // Set command prompt to be `:`
+            self.text = String::from(":");
+        }
     }
 
     pub fn is_editing(&self) -> bool {
@@ -53,6 +60,20 @@ impl Input {
 
     pub fn text(&self) -> String {
         self.text.clone()
+    }
+
+    pub fn clear(&mut self) {
+        self.text = String::new()
+    }
+}
+
+impl Default for Input {
+    fn default() -> Self {
+        Self {
+            editing: false,
+            text: String::new(),
+            status: InputStatus::Info,
+        }
     }
 }
 
@@ -69,12 +90,33 @@ impl Draw for Input {
     }
 }
 
-impl Default for Input {
-    fn default() -> Self {
-        Self {
-            editing: false,
-            text: String::from(""),
-            status: InputStatus::Info,
-        }
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn input_editing() {
+        let mut def = super::Input::default();
+        assert_eq!(
+            def,
+            super::Input {
+                editing: false,
+                text: String::new(),
+                status: super::InputStatus::Info
+            }
+        );
+        def.editing(true);
+        def.push('a');
+        def.push('b');
+        assert_eq!(def.is_editing(), true);
+        assert_eq!(def.text(), String::from(":ab"));
+        // pop doesn't remove `:` prompt
+        def.pop();
+        def.pop();
+        def.pop();
+        def.editing(false);
+        assert_eq!(def.is_editing(), false);
+        assert_eq!(def.text(), String::from(":"));
+        // Clear removes text
+        def.clear();
+        assert_eq!(def.text(), String::new());
     }
 }

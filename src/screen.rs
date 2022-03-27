@@ -2,7 +2,9 @@ use crate::input::Input;
 use crate::repo::Repos;
 use crate::repoview::RepoView;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -121,6 +123,15 @@ impl Screen {
         };
 
         if let Event::Key(key) = raw_evt {
+            // Global exit on control-C
+            if let KeyEvent {
+                modifiers: KeyModifiers::CONTROL,
+                code: KeyCode::Char('c') | KeyCode::Char('C'),
+            } = key
+            {
+                return true;
+            }
+
             if self.input.is_editing() {
                 match key.code {
                     KeyCode::Char(x) => self.input.push(x),
@@ -165,14 +176,19 @@ impl Screen {
             self.input = Input::warning(String::from("No command"));
             return;
         }
-        match cmd_str[0] {
-            ":/" => unimplemented!(), // Search
-            ":t" => self.repoview.tag_command(&cmd_str[1..]),
-            ":a" => {
-                if let Err(e) = self.repoview.alias_command(&cmd_str[1..]) {
-                    self.input = e;
-                }
+
+        let mut handle_cmd = |res: Option<Input>| {
+            self.input.editing(false);
+            match res {
+                Some(i) => self.input = i,
+                None => self.input.clear(),
             }
+        };
+        match cmd_str[0] {
+            ":/" | ":f/" => handle_cmd(self.repoview.filter_command(&cmd_str[1..])),
+            ":s/" => unimplemented!(), // Search
+            ":t" => handle_cmd(self.repoview.tag_command(&cmd_str[1..])),
+            ":a" => handle_cmd(self.repoview.alias_command(&cmd_str[1..])),
             _ => self.input.editing(false),
         }
     }

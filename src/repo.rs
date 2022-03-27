@@ -8,6 +8,13 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
+pub enum QueryOpts {
+    Name,
+    Tags,
+    Alias,
+    Any,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
     //Bare repo,
@@ -90,6 +97,13 @@ impl Repo {
 
     pub fn add_alias(&mut self, alias: String) {
         self.alias = Some(alias)
+    }
+
+    pub fn query(&self, query_str: &str, opts: QueryOpts) -> bool {
+        match opts {
+            QueryOpts::Name => self.name.contains(query_str),
+            _ => unimplemented!(),
+        }
     }
 }
 
