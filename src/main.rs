@@ -14,6 +14,7 @@ mod repo;
 mod repoitem;
 mod repoview;
 mod screen;
+pub mod sorting;
 mod utils;
 
 fn usage() {

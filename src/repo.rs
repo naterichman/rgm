@@ -5,7 +5,8 @@ use std::convert;
 use std::fmt;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
+use std::ffi::OsString;
 use walkdir::WalkDir;
 
 pub enum QueryOpts {
@@ -149,13 +150,6 @@ impl convert::TryFrom<Repository> for Repo {
     }
 }
 
-impl fmt::Display for Repo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: Proper display
-        write!(f, "{}", self.path.display())
-    }
-}
-
 fn local_remote_diff(
     repo: &Repository,
     remote: &str,
@@ -240,10 +234,8 @@ impl Repos {
         }
         longest
     }
-}
 
-impl From<&PathBuf> for Repos {
-    fn from(path: &PathBuf) -> Self {
+    pub fn from_dir(path: &PathBuf) -> Self {
         let mut walker = WalkDir::new(path.as_path()).into_iter();
         let mut repos: Vec<Repo> = Vec::new();
         loop {
@@ -289,4 +281,9 @@ impl From<&PathBuf> for Repos {
             repos,
         }
     }
+}
+
+pub struct PathNode {
+    path: OsString
+    children: Vec<Box<PathNode>>
 }
