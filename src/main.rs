@@ -48,7 +48,7 @@ fn main() {
                 }
             }
             Commands::Import { path } => {
-                let repos = Repos::from(&path);
+                let repos = Repos::from_dir(&path);
                 match repos.save() {
                     Ok(p) => println!("Saved {} repos to {}", &repos.meta.size, p.display()),
                     Err(e) => println!("Error saving repos: {}", e),

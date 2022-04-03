@@ -6,12 +6,15 @@ use tui::{
     terminal::Frame,
     widgets::{Block, Paragraph},
 };
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum InputStatus {
     Error,
     Warning,
     Info,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Input {
     editing: bool,
     text: String,

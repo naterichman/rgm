@@ -282,8 +282,3 @@ impl Repos {
         }
     }
 }
-
-pub struct PathNode {
-    path: OsString
-    children: Vec<Box<PathNode>>
-}
