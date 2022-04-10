@@ -1,14 +1,13 @@
-use crate::error::{Result, RgmError};
 use git2::{Error as GitError, ErrorCode, Repository, StatusOptions};
 use serde::{Deserialize, Serialize};
-use std::convert;
-use std::fmt;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::path::{PathBuf, Path};
-use std::ffi::OsString;
+use std::path::PathBuf;
 use walkdir::WalkDir;
 use log::{error, info};
+
+use crate::utils::config_file;
+use crate::error::{Result, RgmError};
 
 pub enum QueryOpts {
     Name,
@@ -197,11 +196,6 @@ pub struct Repos {
     pub meta: Meta,
 }
 
-fn config_file() -> PathBuf {
-    let mut home = dirs::home_dir().unwrap();
-    home.push(".rgm.conf");
-    home
-}
 
 impl Repos {
     pub fn save(&self) -> Result<PathBuf> {
@@ -306,3 +300,38 @@ impl Repos {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn empty_repo() -> Repo {
+        Repo::new(
+            PathBuf::from("/tmp/test"),
+            String::from("test"),
+            String::from("main"),
+            Some(Status::Clean),
+            vec![],
+            vec![],
+            vec![],
+        )
+    }
+    
+    #[test]
+    fn test_repo_alias(){
+        let repo = empty_repo();
+        repo.add_alias(String::from("alias"));
+        assert_eq!(&repo.alias, String::from("alias"))
+    }
+
+    #[test]
+    fn test_repo_tags(){
+        let repo = empty_repo();
+        let mut tags = vec![String::from("tag1"), String::from("tag2")];
+        repo.add_tags(&mut tags);
+        
+        assert_eq!(repo.tags.len(), 2);
+        assert!(repo.tags.contains(&String::from("tag1")));
+    }
+}
+

@@ -1,9 +1,16 @@
 // CLI parser and app state
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ArgEnum};
 use std::path::PathBuf;
 
+#[derive(Parser, Debug, ArgEnum, PartialEq, Eq, Clone)]
+pub enum ShellType{
+    // TODO add other shells
+    Zsh,
+    Bash,
+}
+
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version, about, long_about = None, name = "rgm")]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Option<Commands>,
@@ -35,9 +42,17 @@ pub enum Commands {
         path: PathBuf,
     },
 
+    /// Update the stored repos (status, remotes, branch, etc.)
     #[clap(arg_required_else_help = true)]
     Update{
         #[clap(required = false, parse(from_os_str))]
         path: Option<PathBuf>
+    },
+
+    /// Initialize RGM
+    #[clap(arg_required_else_help = true)]
+    Init {
+        #[clap(required = true, arg_enum)]
+        shell: ShellType
     }
 }

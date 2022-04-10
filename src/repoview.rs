@@ -34,6 +34,12 @@ impl RepoView {
         }
     }
 
+    pub fn curr(&self) -> Option<&Repo> {
+        if let Some(s) = self.items.selected(){
+            Some(&self.items.items[s])
+        } else { None }
+    }
+
     pub fn tag_command(&mut self, cmd: &[&str]) -> Option<Input> {
         // Convert to Vec<String>
         let mut tags = cmd.iter().map(|v| String::from(*v)).collect();

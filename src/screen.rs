@@ -1,6 +1,7 @@
 use crate::input::Input;
 use crate::repo::Repos;
 use crate::repoview::RepoView;
+use crate::utils::shell_file;
 use crossterm::{
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
@@ -8,11 +9,12 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use log::{debug, info};
+use log::{debug, info, error};
 use std::{
     error::Error,
     io,
     time::{Duration, Instant},
+    fs,
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -161,11 +163,29 @@ impl Screen {
                         self.repoview.previous();
                     }
                     KeyCode::Left | KeyCode::Right => self.repoview.toggle_expanded(),
+                    KeyCode::Enter => {
+                        self.write_shell_script();
+                        return true
+                    }
                     _ => {}
                 }
             }
         }
         false
+    }
+
+    fn write_shell_script(&self) -> std::io::Result<()>{
+        if self.repoview.curr().is_none(){
+            error!("Cannot write shell script for current selected. None selected");
+            return Ok(())
+        }
+        let shell_file = shell_file();
+        let repo = self.repoview.curr().unwrap();
+        fs::write(
+            &shell_file,
+            format!("#!/bin/sh\ncd {}", repo.path.display())
+        )?;
+        Ok(())
     }
 
     fn parse_command(&mut self) {
