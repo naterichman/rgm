@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use std::path::{PathBuf, Path};
 use std::ffi::OsString;
 use walkdir::WalkDir;
+use log::{error, info};
 
 pub enum QueryOpts {
     Name,
@@ -86,12 +87,6 @@ impl Repo {
         }
     }
 
-    pub fn update(&mut self) {
-        // TODO: fetch remotes, branch, status from repo by path
-        let repo_raw = Repository::open(&self.path.as_path());
-        unimplemented!()
-    }
-
     pub fn add_tags(&mut self, add_tags: &mut Vec<String>) {
         self.tags.append(add_tags);
     }
@@ -106,32 +101,29 @@ impl Repo {
             _ => unimplemented!(),
         }
     }
-}
 
-impl convert::TryFrom<Repository> for Repo {
-    type Error = GitError;
-    fn try_from(raw: Repository) -> std::result::Result<Self, Self::Error> {
-        let head = raw.head()?;
-        let rev = head.shorthand().unwrap();
-
-        let mut stat_opts = StatusOptions::new();
-        let status = match raw.statuses(Some(&mut stat_opts)) {
-            Ok(status_raw) => {
-                // TODO: determine between clean, detached, behind, ahead
-                if status_raw.is_empty() {
-                    local_remote_diff(&raw, "origin").ok()
-                } else {
-                    Some(Status::Dirty)
-                }
-            }
-            Err(e) => {
-                if e.code() == ErrorCode::BareRepo {
-                    Some(Status::Bare)
-                } else {
-                    None
-                }
+    pub fn update(&mut self) {
+        let raw = match Repository::open(&self.path.as_path()){
+            Ok(r) => r,
+            Err(msg) => {
+                error!("{:?}", msg);
+                return
             }
         };
+        self.status = get_status(&raw);
+        self.remotes = match raw.remotes() {
+            Ok(remotes) => remotes.iter()
+                .map(|x| x.unwrap().to_string())
+                .collect(),
+            Err(_) => Vec::new()
+        }
+    }
+
+    pub fn from_raw(raw: Repository) -> std::result::Result<Self, GitError> {
+        let head = raw.head()?;
+        let rev = head.shorthand().unwrap();
+        
+        let status = get_status(&raw);
         let repo_path = raw.workdir().unwrap().to_path_buf();
         let name = String::from(repo_path.as_path().file_name().unwrap().to_str().unwrap());
         Ok(Repo {
@@ -148,6 +140,28 @@ impl convert::TryFrom<Repository> for Repo {
             tags: vec![],
         })
     }
+}
+
+fn get_status(raw: &Repository) -> Option<Status> {
+    let mut stat_opts = StatusOptions::new();
+    let status = match raw.statuses(Some(&mut stat_opts)) {
+        Ok(status_raw) => {
+            // TODO: determine between clean, detached, behind, ahead
+            if status_raw.is_empty() {
+                local_remote_diff(&raw, "origin").ok()
+            } else {
+                Some(Status::Dirty)
+            }
+        }
+        Err(e) => {
+            if e.code() == ErrorCode::BareRepo {
+                Some(Status::Bare)
+            } else {
+                None
+            }
+        }
+    };
+    status
 }
 
 fn local_remote_diff(
@@ -225,6 +239,16 @@ impl Repos {
         Ok(repos)
     }
 
+    pub fn update(&mut self){
+        for repo in self.repos.iter_mut() {
+            repo.update();
+        }
+        if let Err(e) = self.save(){
+            error!("{:?}", e);
+        }
+        info!("Updated repos")
+    }
+
     pub fn longest_name(&self) -> usize {
         let mut longest = 0;
         for repo in self.repos.iter() {
@@ -264,7 +288,7 @@ impl Repos {
                 if g_dir.exists() && g_dir.is_dir() {
                     walker.skip_current_dir();
                     let raw = Repository::open(entry.path());
-                    let repo = Repo::try_from(raw.unwrap());
+                    let repo = Repo::from_raw(raw.unwrap());
                     match repo {
                         Ok(v) => repos.push(v),
                         Err(s) => println!(

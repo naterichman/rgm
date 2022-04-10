@@ -1,6 +1,7 @@
 use args::{Cli, Commands};
 use clap::Parser;
 use logging::setup_log;
+use log::{info, error};
 use std::io;
 
 use crate::repo::Repos;
@@ -53,19 +54,35 @@ fn main() {
                     Ok(p) => println!("Saved {} repos to {}", &repos.meta.size, p.display()),
                     Err(e) => println!("Error saving repos: {}", e),
                 }
+            },
+            Commands::Update { path } => {
+                let repos = Repos::load();
+                match repos {
+                    // TODO progress bar for updating
+                    Ok(mut r) => {
+                        if let Some(p) = path {
+                            // TODO: Update only paths in given directory
+                            unimplemented!()
+                        } else {
+                            r.update();
+                        }
+                    },
+                    Err(e) => error!("{:?}", e),
+                }
             }
         },
         None => {
             let repos = Repos::load();
             match repos {
                 Ok(r) => {
+                    //r.update();
                     let mut screen = Screen::new(r);
                     let mut out = io::stdout();
                     if let Err(e) = screen.run(out) {
-                        println!("{:?}", e)
+                        error!("{:?}", e)
                     }
                 }
-                Err(e) => println!("{:?}", e),
+                Err(e) => error!("{:?}", e),
             }
         }
     }

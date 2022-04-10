@@ -34,4 +34,10 @@ pub enum Commands {
         #[clap(required = true, parse(from_os_str))]
         path: PathBuf,
     },
+
+    #[clap(arg_required_else_help = true)]
+    Update{
+        #[clap(required = false, parse(from_os_str))]
+        path: Option<PathBuf>
+    }
 }
