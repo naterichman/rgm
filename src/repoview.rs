@@ -1,5 +1,5 @@
 use crate::input::Input;
-use crate::repo::{QueryOpts, Repo, Repos};
+use crate::repo::{QueryOpts, Repo, Repos, Meta};
 use crate::repoitem::RepoItem;
 use crate::screen::Draw;
 use crate::utils;
@@ -34,15 +34,28 @@ impl RepoView {
         }
     }
 
+    pub fn save_repos(self){
+        let repos = Repos {
+            meta: Meta { size: self.items.items.len() },
+            repos: self.items.items
+        };
+        repos.save();
+    }
+
     pub fn curr(&self) -> Option<&Repo> {
         if let Some(s) = self.items.selected(){
             Some(&self.items.items[s])
         } else { None }
     }
 
+    pub fn reset_selected(&mut self) {
+        self.selected = Vec::<usize>::new();
+    }
+
     pub fn tag_command(&mut self, cmd: &[&str]) -> Option<Input> {
         // Convert to Vec<String>
         let mut tags = cmd.iter().map(|v| String::from(*v)).collect();
+        info!("Adding tags {:?} to {:?} repos", tags, self.selected.len());
         for idx in &self.selected[..] {
             self.items.items[*idx].add_tags(&mut tags);
         }
@@ -78,15 +91,19 @@ impl RepoView {
 
     pub fn select_current(&mut self) {
         if let Some(s) = self.items.selected() {
-            debug!("Selecting {}", s);
+            info!("Selecting {}", s);
             utils::set_item_in_vec(&mut self.selected, s);
         }
     }
 
-    pub fn start_select_range(&mut self) {
-        self.select_mode = true;
-        debug!("Starting select range");
-        self.select_current()
+    pub fn select_range(&mut self) {
+        if self.select_mode {
+            info!("Starting select range");
+            self.select_mode = true;
+            self.select_current();
+        } else {
+            info!("Exiting select range");
+        }
     }
 
     pub fn toggle_expanded(&mut self) {
@@ -125,7 +142,7 @@ impl Draw for RepoView {
                     );
                     let selected = self.selected.contains(&i);
                     let (b_color, f_color) = if selected {
-                        (Color::Rgb(40, 40, 40), Color::White)
+                        (Color::Rgb(100, 100, 100), Color::White)
                     } else {
                         (Color::Reset, Color::White)
                     };

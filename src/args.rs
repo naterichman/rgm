@@ -24,9 +24,10 @@ pub enum Commands {
     /// Tag repo(s).
     #[clap(arg_required_else_help = true)]
     Tag {
-        tags: Vec<String>,
         #[clap(required = true, parse(from_os_str))]
         path: PathBuf,
+        #[clap(required = true)]
+        tags: Vec<String>,
     },
     /// Add alias to repo.
     #[clap(arg_required_else_help = true)]

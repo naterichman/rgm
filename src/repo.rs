@@ -86,8 +86,15 @@ impl Repo {
         }
     }
 
-    pub fn add_tags(&mut self, add_tags: &mut Vec<String>) {
-        self.tags.append(add_tags);
+    pub fn add_tags(&mut self, add_tags: &Vec<String>) -> bool {
+        let mut added = false;
+        for tag in add_tags.iter() {
+            if !self.tags.contains(&tag) {
+                added = true;
+                self.tags.push(tag.clone())
+            }
+        }
+        added
     }
 
     pub fn add_alias(&mut self, alias: String) {

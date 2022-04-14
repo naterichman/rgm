@@ -6,6 +6,7 @@ use tui::{
     terminal::Frame,
     widgets::{Block, Paragraph},
 };
+use log::info;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum InputStatus {
@@ -52,6 +53,7 @@ impl Input {
     pub fn editing(&mut self, v: bool) {
         self.editing = v;
         if v {
+            info!("Entering command mode");
             // Set command prompt to be `:`
             self.text = String::from(":");
         }
@@ -84,10 +86,13 @@ impl Draw for Input {
     fn draw<B: Backend>(&mut self, frame: &mut Frame<B>, area: Rect) {
         let input = Paragraph::new(self.text.as_ref())
             .block(Block::default())
-            .style(match self.status {
-                InputStatus::Info => Style::default(),
-                InputStatus::Warning => Style::default().fg(Color::Yellow),
-                InputStatus::Error => Style::default().fg(Color::Red),
+            .style({
+                let style = match self.status {
+                    InputStatus::Info => Style::default().fg(Color::Black),
+                    InputStatus::Warning => Style::default().fg(Color::Yellow),
+                    InputStatus::Error => Style::default().fg(Color::Red),
+                };
+                style.bg(if self.editing { Color::Rgb(200,200,200) } else { Color::Reset } )
             });
         frame.render_widget(input, area);
     }

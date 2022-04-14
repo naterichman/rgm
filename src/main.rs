@@ -44,11 +44,13 @@ fn main() {
                 for r in repos.repos.iter_mut() {
                     // if r.path is a subdirectory of path
                     if r.path.starts_with(&path) {
-                        r.add_tags(&mut tags);
-                        applied += 1;
+                        if r.add_tags(&mut tags){
+                            applied += 1;
+                        }
                     }
                 }
                 println!("Applied tags to {} repos, saving", applied);
+                println!("{:?}", repos);
                 if let Err(e) = repos.save(){
                     println!("{:?}", e);
                 }

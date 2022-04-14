@@ -54,7 +54,7 @@ impl Screen {
         Ok(terminal)
     }
 
-    pub fn run<W>(&mut self, writer: W) -> Result<(), Box<dyn Error>>
+    pub fn run<W>(mut self, writer: W) -> Result<(), Box<dyn Error>>
     where
         W: io::Write,
     {
@@ -79,6 +79,7 @@ impl Screen {
             }
         }
         self.exit(&mut terminal)?;
+        self.repoview.save_repos();
         Ok(())
     }
 
@@ -125,6 +126,7 @@ impl Screen {
         };
 
         if let Event::Key(key) = raw_evt {
+            debug!("Recieved {:?}", key);
             // Global exit on control-C
             if let KeyEvent {
                 modifiers: KeyModifiers::CONTROL,
@@ -138,8 +140,11 @@ impl Screen {
                 match key.code {
                     KeyCode::Char(x) => self.input.push(x),
                     KeyCode::Enter => self.parse_command(),
-                    KeyCode::Backspace => {
-                        self.input.pop();
+                    KeyCode::Backspace => self.input.pop(),
+                    KeyCode::Esc => {
+                        info!("Leaving command mode");
+                        self.input.editing(false);
+                        self.input.clear();
                     }
                     _ => {}
                 }
@@ -147,7 +152,7 @@ impl Screen {
                 match key.code {
                     KeyCode::Char('q') => return true,
                     KeyCode::Char('v') => self.repoview.select_current(),
-                    KeyCode::Char('V') => self.repoview.start_select_range(),
+                    KeyCode::Char('V') => self.repoview.select_range(),
                     KeyCode::Char(':') | KeyCode::Char('/') => self.input.editing(true),
                     //KeyCode::Char('a') => self.apply_alias(),
                     KeyCode::Down => {
@@ -164,7 +169,9 @@ impl Screen {
                     }
                     KeyCode::Left | KeyCode::Right => self.repoview.toggle_expanded(),
                     KeyCode::Enter => {
-                        self.write_shell_script();
+                        if let Err(e) = self.write_shell_script(){
+                            error!("{:?}", e);
+                        }
                         return true
                     }
                     _ => {}
@@ -191,6 +198,7 @@ impl Screen {
     fn parse_command(&mut self) {
         // Command format: `:<command> <args>`
         let input = self.input.text();
+        info!("Parsing command {:?}", &input);
         let cmd_str: Vec<&str> = input.split(" ").collect();
         if cmd_str.len() < 1 {
             self.input = Input::warning(String::from("No command"));
@@ -211,5 +219,6 @@ impl Screen {
             ":a" => handle_cmd(self.repoview.alias_command(&cmd_str[1..])),
             _ => self.input.editing(false),
         }
+        self.repoview.reset_selected();
     }
 }

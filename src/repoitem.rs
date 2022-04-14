@@ -49,10 +49,8 @@ impl<'a> RepoItem<'a> {
             Span::raw(prefix),
             Span::raw(name),
             Span::raw(spaces),
-            Span::styled(
-                status.display(),
-                Style::default().fg(get_color_for_status(status)),
-            ),
+            Span::raw(" | "),
+            Span::raw(self.repo.tags.join(", ")),
         ]);
         spans.push(first_line);
         if self.expanded {
@@ -62,7 +60,7 @@ impl<'a> RepoItem<'a> {
                 self.repo.remotes
             )));
             spans.push(Spans::from(format!("    Alias: {:?}\r\n", self.repo.alias)));
-            spans.push(Spans::from(format!("    Tags: {:?}\r\n", self.repo.tags)));
+            spans.push(Spans::from(format!("    Status: {}\r\n", status.display())));
         }
         spans
     }
