@@ -1,8 +1,26 @@
+# cargo-features = ["edition2021"]
+
 [package]
-name = "rgm"
+name = "rgm-bin"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# https://github.com/rust-lang/rust/issues/40787
+#[profile.dev]
+#split-debuginfo = "packed"
+
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "3.1.0", features = ["derive"] }
+walkdir = "2"
+git2 = "0.13"
+dirs = "4.0.0"
+log = "0.4.14"
+log4rs = "1.0.0"
+tui = { version = "0.17.0", features = ["crossterm"] }
+crossterm = "0.23.1"
+indexmap = "1.8.1"
+lazy_static = "1.4.0"
